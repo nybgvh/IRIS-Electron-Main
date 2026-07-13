@@ -1,0 +1,16 @@
+{
+  "name": "iris-iucn",
+  "version": "1.0.0",
+  "description": "IRIS — IUCN Red List Information System",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^42.5.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "sql.js": "^1.12.0"
+  }
+}
