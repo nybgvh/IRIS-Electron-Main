@@ -10,8 +10,8 @@ Gemini.
 - [Python](https://www.python.org/downloads/) 3.9 or later, available on your
   `PATH` as `python3`, `python`, or (on Windows) the `py` launcher — the app
   auto-detects whichever is present
-- A Gemini API key ([Google AI Studio](https://aistudio.google.com/apikey))
-- A VoucherVision auth token
+- Gemini API key 
+- VoucherVision auth token
 
 ## Setup
 
