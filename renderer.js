@@ -861,16 +861,14 @@ const keyToggle       = document.getElementById("key-toggle");
 const saveKeyBtn      = document.getElementById("save-key-btn");
 
 document.getElementById("settings-btn").addEventListener("click", async () => {
-  const [outputRoot, apiKey, authToken, vertexProject] = await Promise.all([
+  const [outputRoot, apiKey, authToken] = await Promise.all([
     window.api.getOutputRoot(),
     window.api.getApiKey(),
     window.api.getAuthToken(),
-    window.api.getVertexProject(),
   ]);
   document.getElementById("output-root-input").value    = outputRoot;
   apiKeyInput.value = apiKey;
   document.getElementById("auth-token-input").value     = authToken;
-  document.getElementById("vertex-project-input").value = vertexProject;
   settingsModal.classList.remove("hidden");
 });
 
@@ -897,7 +895,6 @@ saveKeyBtn.addEventListener("click", async () => {
     window.api.setOutputRoot(document.getElementById("output-root-input").value.trim()),
     window.api.setApiKey(apiKeyInput.value.trim()),
     window.api.setAuthToken(document.getElementById("auth-token-input").value.trim()),
-    window.api.setVertexProject(document.getElementById("vertex-project-input").value.trim()),
   ]);
   closeSettings();
   // If output root changed, reload

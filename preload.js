@@ -27,8 +27,6 @@ contextBridge.exposeInMainWorld("api", {
   setApiKey:          (v)       => ipcRenderer.invoke("set-api-key", v),
   getAuthToken:       ()        => ipcRenderer.invoke("get-auth-token"),
   setAuthToken:       (v)       => ipcRenderer.invoke("set-auth-token", v),
-  getVertexProject:   ()        => ipcRenderer.invoke("get-vertex-project"),
-  setVertexProject:   (v)       => ipcRenderer.invoke("set-vertex-project", v),
 
   // Images
   pickImages:         ()        => ipcRenderer.invoke("pick-images"),

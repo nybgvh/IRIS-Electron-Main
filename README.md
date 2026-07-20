@@ -1,61 +1,65 @@
 # IRIS — IUCN Red List Information System
 
-A desktop application for generating IUCN Red List assessments from herbarium specimen images using AI-powered transcription and summarisation.
+An Electron desktop app for browsing herbarium specimen records, running them
+through VoucherVision, and generating IUCN Red List assessment summaries with
+Gemini.
 
-## Overview
-
-IRIS streamlines the Red List assessment workflow:
-
-1. **Upload** herbarium specimen images for a species
-2. **Transcribe** label data using VoucherVision (https://github.com/Gene-Weaver/VoucherVision)
-3. **Summarise** specimen records into a structured IUCN Red List assessment
-4. **Browse** assessments by section with an interactive map of collection localities
-
-## Features
-
-- Multi-user login with per-user species data
-- VoucherVision integration for automated label transcription
-- AI-generated assessments across 6 IUCN sections (Taxonomy, Geographic Range, Habitat, Ecology, Use & Trade, Threats)
-- Assessment output in multiple languages
-- Interactive specimen map with collection date colour coding and GPS confidence indicators
+Runs on Windows, macOS, and Linux.
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [Python 3](https://www.python.org/) with the following packages:
-```bash
-  pip install google-generativeai VoucherVision
-```
+- [Node.js](https://nodejs.org/) 18 or later (includes npm)
+- [Python](https://www.python.org/downloads/) 3.9 or later, available on your
+  `PATH` as `python3`, `python`, or (on Windows) the `py` launcher — the app
+  auto-detects whichever is present
+- A Gemini API key ([Google AI Studio](https://aistudio.google.com/apikey))
+- A VoucherVision auth token
 
-## Installation
+## Setup
 
 ```bash
-git clone https://github.com/nybgvh/IRIS-Electron-Main.git
-cd IRIS-Electron-Main
+# 1. Clone the repo
+git clone <this-repo-url>
+cd iucn-browser
+
+# 2. Install Node dependencies
 npm install
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+# on macOS/Linux, use pip3 if `pip` isn't mapped to Python 3:
+pip3 install -r requirements.txt
+
+# 4. Run the app
 npm start
 ```
 
-## First-time Setup
+On first launch, open **Settings** in the app and add:
+- **Output Root Folder** — where species folders live
+- **Gemini API Key** — used for both the Red List summary step and the
+  VoucherVision voucher step
+- **VoucherVision Auth Token** — used for the voucher step
 
-1. Launch the app and register an account
-2. Open **Settings** and enter:
-   - Output root folder (where species data will be stored)
-   - Gemini API key
-   - VoucherVision auth token
-   - Vertex AI project ID
+All credentials are stored locally in Electron's per-user app-data directory
+(never committed to the repo).
 
+## Platform notes
 
-## Usage
+- **Windows**: the app looks for `python`, then `py`, then `python3` on
+  `PATH`. Make sure "Add python.exe to PATH" was checked during install.
+- **macOS / Linux**: the app looks for `python3` first, then `python`.
+- Line endings, file paths, and the settings/database storage location are
+  all handled through Node/Electron APIs (`path.join`, `app.getPath`), so no
+  manual path adjustments are needed between OSes.
 
-### Adding a new species
-1. Click **+ New species** in the sidebar
-2. Enter the species name and select herbarium images
-3. Click **Create & process** — VoucherVision will transcribe the labels
-4. Click **Summarise** to generate the Red List assessment
+## Project structure
 
-### Browsing assessments
-- Click any species in the sidebar to view its assessment
-- Use the section nav pills to jump between sections
-- Click map markers to see specimen details
-- Click thumbnails to view source images full size
+| File                  | Purpose                                              |
+|------------------------|------------------------------------------------------|
+| `main.js`              | Electron main process, IPC handlers, pipeline spawn  |
+| `preload.js`           | Context-isolated bridge exposed to the renderer       |
+| `renderer.js`          | UI logic                                              |
+| `index.html` / `style.css` | UI markup and styling                            |
+| `database.js`          | Local SQLite (via sql.js) persistence                |
+| `pipeline.py`          | Generates Red List summaries via Gemini              |
+| `voucher_pipeline.py`  | Runs images through VoucherVision                     |

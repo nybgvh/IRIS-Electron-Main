@@ -1,12 +1,41 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
 const fs   = require("fs");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const db   = require("./database");
 
 let mainWindow;
 let activeProcess = null;
 let currentUser   = null; // { id, username } while logged in
+
+// ── Cross-platform Python resolution ────────────────────────────────────────
+// Different OSes (and even different installers on the same OS) expose the
+// Python interpreter under different command names. We probe a short list of
+// candidates once, cache the winner, and reuse it for every pipeline spawn.
+let cachedPythonCmd = null;
+
+function resolvePythonCmd() {
+  if (cachedPythonCmd) return cachedPythonCmd;
+
+  const candidates = process.platform === "win32"
+    ? ["python", "py", "python3"]
+    : ["python3", "python"];
+
+  for (const cmd of candidates) {
+    try {
+      const result = spawnSync(cmd, ["--version"], { stdio: "ignore" });
+      if (!result.error && result.status === 0) {
+        cachedPythonCmd = cmd;
+        return cmd;
+      }
+    } catch (_) { /* try next candidate */ }
+  }
+
+  // Nothing found — fall back to the most common default so the resulting
+  // error message ("Is Python installed and on PATH?") still makes sense.
+  cachedPythonCmd = process.platform === "win32" ? "python" : "python3";
+  return cachedPythonCmd;
+}
 
 // ── Settings (shared API key) ─────────────────────────────────────────────────
 const settingsPath = path.join(app.getPath("userData"), "settings.json");
@@ -279,10 +308,8 @@ ipcMain.handle("get-output-root",    () => loadSettings().outputRoot || "");
 ipcMain.handle("set-output-root",    (_e, v) => { const s=loadSettings(); s.outputRoot=v; saveSettings(s); return true; });
 ipcMain.handle("get-api-key",       () => loadSettings().geminiApiKey   || "");
 ipcMain.handle("get-auth-token",    () => loadSettings().authToken       || "");
-ipcMain.handle("get-vertex-project",() => loadSettings().vertexProject   || "");
 ipcMain.handle("set-api-key",       (_e, v) => { const s=loadSettings(); s.geminiApiKey  =v; saveSettings(s); return true; });
 ipcMain.handle("set-auth-token",    (_e, v) => { const s=loadSettings(); s.authToken      =v; saveSettings(s); return true; });
-ipcMain.handle("set-vertex-project",(_e, v) => { const s=loadSettings(); s.vertexProject  =v; saveSettings(s); return true; });
 
 // ── IPC: browse-for-folder (generic folder picker, no auth required) ──────────
 ipcMain.handle("browse-for-folder", async () => {
@@ -383,7 +410,7 @@ ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
   if (speciesName) args.push(speciesName);
   args.push(language || "English");
 
-  const pythonCmd = process.platform === "win32" ? "python" : "python3";
+  const pythonCmd = resolvePythonCmd();
 
   return new Promise((resolve) => {
     let proc;
@@ -466,13 +493,13 @@ ipcMain.handle("pick-images", async () => {
 ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
   const settings = loadSettings();
   if (!settings.authToken)      return { error: "No auth token set. Add it in Settings." };
-  if (!settings.vertexProject)  return { error: "No Vertex project set. Add it in Settings." };
+  if (!settings.geminiApiKey)   return { error: "No Gemini API key set. Add it in Settings." };
   if (activeProcess)            return { error: "A pipeline is already running." };
 
   const speciesDir = path.join(rootDir, speciesName);
   const scriptPath = path.join(__dirname, "voucher_pipeline.py");
-  const args       = [scriptPath, speciesDir, settings.authToken, settings.vertexProject];
-  const pythonCmd  = process.platform === "win32" ? "python" : "python3";
+  const args       = [scriptPath, speciesDir, settings.authToken, settings.geminiApiKey];
+  const pythonCmd  = resolvePythonCmd();
 
   return new Promise((resolve) => {
     let proc;

@@ -1,0 +1,5 @@
+# Python dependencies for pipeline.py and voucher_pipeline.py
+# Install with: pip install -r requirements.txt (use pip3 on macOS/Linux if needed)
+
+google-generativeai>=0.8.0
+VoucherVision

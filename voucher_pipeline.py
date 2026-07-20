@@ -3,7 +3,7 @@ IRIS Voucher Pipeline
 Spawned by the Electron app. Copies images to pics/, runs VoucherVision,
 then streams progress via stdout as JSON lines.
 
-Usage: python voucher_pipeline.py <species_dir> <auth_token> <vertex_project>
+Usage: python voucher_pipeline.py <species_dir> <auth_token> <gemini_api_key>
 """
 
 import sys
@@ -26,12 +26,12 @@ def emit_done():
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 if len(sys.argv) < 4:
-    emit("fatal", message="Usage: voucher_pipeline.py <species_dir> <auth_token> <vertex_project>")
+    emit("fatal", message="Usage: voucher_pipeline.py <species_dir> <auth_token> <gemini_api_key>")
     sys.exit(1)
 
 species_dir    = Path(sys.argv[1])
 auth_token     = sys.argv[2]
-vertex_project = sys.argv[3]
+gemini_api_key = sys.argv[3]
 
 if not species_dir.is_dir():
     emit("fatal", message=f"Species directory not found: {species_dir}")
@@ -69,7 +69,7 @@ try:
         verbose=True,
         save_to_xlsx=True,
         auth_token=auth_token,
-        vertex_project=vertex_project,
+        gemini_api_key=gemini_api_key,
     )
 except Exception as e:
     emit_error(f"VoucherVision error: {e}")
