@@ -1,10 +1,8 @@
 # IRIS — IUCN Red List Information System
 
 An Electron desktop app for browsing herbarium specimen records, running them
-through VoucherVision, and generating IUCN Red List assessment summaries with
+through VoucherVision (https://github.com/Gene-Weaver/VoucherVision), and generating IUCN Red List assessment summaries with
 Gemini.
-
-Runs on Windows, macOS, and Linux.
 
 ## Requirements
 
@@ -19,7 +17,7 @@ Runs on Windows, macOS, and Linux.
 
 ```bash
 # 1. Clone the repo
-git clone <this-repo-url>
+git clone https://github.com/nybgvh/IRIS-Electron-Main.git
 cd iucn-browser
 
 # 2. Install Node dependencies
@@ -43,23 +41,3 @@ On first launch, open **Settings** in the app and add:
 All credentials are stored locally in Electron's per-user app-data directory
 (never committed to the repo).
 
-## Platform notes
-
-- **Windows**: the app looks for `python`, then `py`, then `python3` on
-  `PATH`. Make sure "Add python.exe to PATH" was checked during install.
-- **macOS / Linux**: the app looks for `python3` first, then `python`.
-- Line endings, file paths, and the settings/database storage location are
-  all handled through Node/Electron APIs (`path.join`, `app.getPath`), so no
-  manual path adjustments are needed between OSes.
-
-## Project structure
-
-| File                  | Purpose                                              |
-|------------------------|------------------------------------------------------|
-| `main.js`              | Electron main process, IPC handlers, pipeline spawn  |
-| `preload.js`           | Context-isolated bridge exposed to the renderer       |
-| `renderer.js`          | UI logic                                              |
-| `index.html` / `style.css` | UI markup and styling                            |
-| `database.js`          | Local SQLite (via sql.js) persistence                |
-| `pipeline.py`          | Generates Red List summaries via Gemini              |
-| `voucher_pipeline.py`  | Runs images through VoucherVision                     |
