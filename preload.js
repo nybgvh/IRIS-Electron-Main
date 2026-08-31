@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld("api", {
   getAuthToken:       ()        => ipcRenderer.invoke("get-auth-token"),
   setAuthToken:       (v)       => ipcRenderer.invoke("set-auth-token", v),
 
+  // VoucherVision + Red List option blocks
+  getVvSettings:      ()        => ipcRenderer.invoke("get-vv-settings"),
+  setVvSettings:      (v)       => ipcRenderer.invoke("set-vv-settings", v),
+  getRedlistSettings: ()        => ipcRenderer.invoke("get-redlist-settings"),
+  setRedlistSettings: (v)       => ipcRenderer.invoke("set-redlist-settings", v),
+
   // Images
   pickImages:         ()        => ipcRenderer.invoke("pick-images"),
   copyImagesToPics:   (r,s,ps)  => ipcRenderer.invoke("copy-images-to-pics", r, s, ps),
@@ -42,4 +48,26 @@ contextBridge.exposeInMainWorld("api", {
   cancelPipeline:     ()        => ipcRenderer.invoke("cancel-pipeline"),
   onPipelineEvent:    (cb)      => ipcRenderer.on("pipeline-event", (_e,msg) => cb(msg)),
   offPipelineEvent:   ()        => ipcRenderer.removeAllListeners("pipeline-event"),
+
+  // GBIF import — handlers return { error } on failure; unwrap so the renderer's
+  // try/catch (ported from the source app) sees a thrown Error.
+  gbif: {
+    setCapture:      (on)             => gbifInvoke("gbif:setCapture", on),
+    getOccurrence:   (root, ref)      => gbifInvoke("gbif:getOccurrence", root, ref),
+    saveImport:      (root, ref, d)   => gbifInvoke("gbif:saveImport", root, ref, d),
+    list:            (root)           => gbifInvoke("gbif:list", root),
+    remove:          (id)             => gbifInvoke("gbif:remove", id),
+    enumerateSearch: (root, url, o)   => gbifInvoke("gbif:enumerateSearch", root, url, o),
+    bookmark:        (root, url, lbl) => gbifInvoke("gbif:bookmark", root, url, lbl),
+    bookmarks:       (root)           => gbifInvoke("gbif:bookmarks", root),
+    removeBookmark:  (id)             => gbifInvoke("gbif:removeBookmark", id),
+    onDownload:      (cb)             => ipcRenderer.on("gbif:download", (_e, d) => cb(d)),
+    offDownload:     ()              => ipcRenderer.removeAllListeners("gbif:download"),
+  },
 });
+
+async function gbifInvoke(channel, ...args) {
+  const r = await ipcRenderer.invoke(channel, ...args);
+  if (r && r.error) throw new Error(r.error);
+  return r;
+}

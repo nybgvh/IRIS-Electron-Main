@@ -34,6 +34,10 @@
           <label class="field-label">Password</label>
           <input id="login-password" type="password" placeholder="Enter password" autocomplete="current-password" />
           <button class="auth-submit-btn" id="login-btn">Sign in</button>
+          <!-- TEMP: dev login hint — remove before release (see seedDevAccount in main.js) -->
+          <button type="button" id="dev-login-hint" title="Click to fill the dev test credentials">
+            🔧 Dev login — user: <code>dev</code> · pass: <code>devpass123</code>
+          </button>
         </div>
 
         <div id="tab-register" class="auth-panel hidden">
@@ -50,6 +54,21 @@
 
     <!-- ── Main app ── -->
     <div id="app">
+      <!-- Top-level view tabs -->
+      <nav id="tabbar">
+        <button class="app-tab active" data-view="species">Species</button>
+        <button class="app-tab" data-view="gbif">GBIF</button>
+        <button class="app-tab" data-view="references">References</button>
+        <span class="tabbar-spacer"></span>
+        <button id="settings-tab-btn" class="tabbar-icon" title="Settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </nav>
+
+      <div id="app-body">
       <!-- Sidebar -->
       <aside id="sidebar">
         <div id="sidebar-header">
@@ -155,6 +174,13 @@
           <div id="summary-body"></div>
         </div>
       </main>
+
+      <!-- GBIF browser view (built by renderer GbifPage.mount) -->
+      <section id="gbif-panel" class="view-panel hidden"></section>
+
+      <!-- References view (built by renderer ReferencesPage.mount) -->
+      <section id="references-panel" class="view-panel hidden"></section>
+      </div><!-- /#app-body -->
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -261,6 +287,18 @@
             </button>
           </div>
           <p class="field-hint">All credentials stored locally on your machine.</p>
+
+          <details class="settings-group">
+            <summary>VoucherVision options</summary>
+            <p class="field-hint">Sent to the VoucherVisionGO <code>/process</code> server. Auth uses the VoucherVision Auth Token above.</p>
+            <div id="vv-settings-fields" class="settings-fields"></div>
+          </details>
+
+          <details class="settings-group">
+            <summary>Red List (Gemini) options</summary>
+            <p class="field-hint">Used for summary generation. Auth uses the Gemini API Key above.</p>
+            <div id="redlist-settings-fields" class="settings-fields"></div>
+          </details>
         </div>
         <div class="modal-footer">
           <button id="save-key-btn" class="cta-btn">Save</button>

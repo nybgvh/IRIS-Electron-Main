@@ -41,6 +41,14 @@ document.getElementById("login-btn").addEventListener("click", async () => {
   });
 });
 
+// TEMP (dev testing): click the hint to fill + submit the dev credentials.
+// Remove this block, #dev-login-hint (index.html) and seedDevAccount (main.js) before release.
+document.getElementById("dev-login-hint")?.addEventListener("click", () => {
+  document.getElementById("login-username").value = "dev";
+  document.getElementById("login-password").value = "devpass123";
+  document.getElementById("login-btn").click();
+});
+
 document.getElementById("register-btn").addEventListener("click", async () => {
   clearAuthError();
   const u  = document.getElementById("reg-username").value.trim();
@@ -97,6 +105,7 @@ async function loadFolderFromDb(rootDir) {
   showWelcome();
   updateStats();
   runAllBtn.disabled = state.species.length === 0;
+  onRootChanged();
 }
 
 function showFolderPicker(folders) {
@@ -140,6 +149,8 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   renderSpeciesList();
   updateStats();
   showWelcome();
+  showTab("species");
+  if (GbifPage.isMounted()) GbifPage.refresh();
   authScreen.classList.remove("hidden");
   document.getElementById("login-username").value = "";
   document.getElementById("login-password").value = "";
@@ -273,6 +284,7 @@ function applyFolderResult(result) {
   runAllBtn.disabled    = state.species.length === 0;
   reloadBtn.disabled    = false;
   newSpeciesBtn.disabled= false;
+  onRootChanged();
 }
 
 reloadBtn.addEventListener("click", loadFromOutputRoot);
@@ -860,17 +872,74 @@ const apiKeyInput     = document.getElementById("api-key-input");
 const keyToggle       = document.getElementById("key-toggle");
 const saveKeyBtn      = document.getElementById("save-key-btn");
 
-document.getElementById("settings-btn").addEventListener("click", async () => {
-  const [outputRoot, apiKey, authToken] = await Promise.all([
+// Field schemas for the advanced settings sections (VoucherVision + Red List).
+const VV_FIELDS = [
+  { key: "apiBaseUrl",       label: "Server URL",              type: "text" },
+  { key: "endpoint",         label: "Endpoint",                type: "text" },
+  { key: "prompt",           label: "Prompt",                  type: "text" },
+  { key: "engines",          label: "OCR engines (comma-sep)", type: "text" },
+  { key: "llmModel",         label: "LLM model",               type: "text" },
+  { key: "ocrOnly",          label: "OCR only",                type: "bool" },
+  { key: "notebookMode",     label: "Notebook mode",           type: "bool" },
+  { key: "skipLabelCollage", label: "Skip label collage",      type: "bool" },
+  { key: "includeWfo",       label: "Include WFO",             type: "bool" },
+  { key: "includeCop90",     label: "Include COP90",           type: "bool" },
+  { key: "vertexProject",    label: "Vertex project (optional)", type: "text" },
+  { key: "vertexRegion",     label: "Vertex region",           type: "text" },
+  { key: "concurrency",      label: "Concurrency",             type: "number" },
+  { key: "submitTimeoutMs",  label: "Submit timeout (ms)",     type: "number" },
+  { key: "maxRetries",       label: "Max retries",             type: "number" },
+];
+const REDLIST_FIELDS = [
+  { key: "model",     label: "Gemini model",   type: "text" },
+  { key: "apiBase",   label: "Gemini API base", type: "text" },
+  { key: "timeoutMs", label: "Timeout (ms)",    type: "number" },
+];
+
+function renderSettingsFields(container, fields, values, prefix) {
+  if (!container) return;
+  const esc = (s) => String(s == null ? "" : s).replace(/"/g, "&quot;");
+  container.innerHTML = fields.map(f => {
+    const id = `${prefix}-field-${f.key}`;
+    const v = values ? values[f.key] : undefined;
+    if (f.type === "bool") {
+      return `<label class="settings-check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}/> ${f.label}</label>`;
+    }
+    const t = f.type === "number" ? "number" : "text";
+    return `<label class="settings-field"><span>${f.label}</span>` +
+      `<input type="${t}" id="${id}" value="${esc(v)}" autocomplete="off"/></label>`;
+  }).join("");
+}
+
+function collectSettingsFields(fields, prefix) {
+  const out = {};
+  for (const f of fields) {
+    const el = document.getElementById(`${prefix}-field-${f.key}`);
+    if (!el) continue;
+    if (f.type === "bool") out[f.key] = el.checked;
+    else if (f.type === "number") { const n = parseFloat(el.value); if (Number.isFinite(n)) out[f.key] = n; }
+    else out[f.key] = el.value;
+  }
+  return out;
+}
+
+async function openSettings() {
+  const [outputRoot, apiKey, authToken, vv, rl] = await Promise.all([
     window.api.getOutputRoot(),
     window.api.getApiKey(),
     window.api.getAuthToken(),
+    window.api.getVvSettings(),
+    window.api.getRedlistSettings(),
   ]);
   document.getElementById("output-root-input").value    = outputRoot;
   apiKeyInput.value = apiKey;
   document.getElementById("auth-token-input").value     = authToken;
+  renderSettingsFields(document.getElementById("vv-settings-fields"), VV_FIELDS, vv, "vv");
+  renderSettingsFields(document.getElementById("redlist-settings-fields"), REDLIST_FIELDS, rl, "rl");
   settingsModal.classList.remove("hidden");
-});
+}
+document.getElementById("settings-btn").addEventListener("click", openSettings);
+document.getElementById("settings-tab-btn")?.addEventListener("click", openSettings);
 
 document.getElementById("browse-root-btn").addEventListener("click", async () => {
   const folder = await window.api.browseForFolder();
@@ -895,6 +964,8 @@ saveKeyBtn.addEventListener("click", async () => {
     window.api.setOutputRoot(document.getElementById("output-root-input").value.trim()),
     window.api.setApiKey(apiKeyInput.value.trim()),
     window.api.setAuthToken(document.getElementById("auth-token-input").value.trim()),
+    window.api.setVvSettings(collectSettingsFields(VV_FIELDS, "vv")),
+    window.api.setRedlistSettings(collectSettingsFields(REDLIST_FIELDS, "rl")),
   ]);
   closeSettings();
   // If output root changed, reload
@@ -1358,5 +1429,800 @@ deleteConfirmBtn.addEventListener("click", async () => {
   deleteConfirmBtn.disabled = false;
   deleteConfirmBtn.textContent = "Delete permanently";
 });
+
+// ── Toast ─────────────────────────────────────────────────
+// Small transient notification (the ported GBIF/References pages lean on this;
+// the rest of the app uses alert()/inline errors).
+function toast(message, kind) {
+  let host = document.getElementById("toast-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "toast-host";
+    document.body.appendChild(host);
+  }
+  const el = document.createElement("div");
+  el.className = "toast" + (kind === "error" ? " error" : "");
+  el.textContent = message;
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 300);
+  }, kind === "error" ? 5000 : 3200);
+}
+
+// ── Top-level view tabs (Species / GBIF / References) ─────
+function showTab(name) {
+  document.querySelectorAll(".app-tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.view === name));
+  const isSpecies = name === "species";
+  $("sidebar").classList.toggle("hidden", !isSpecies);
+  $("content").classList.toggle("hidden", !isSpecies);
+  $("gbif-panel").classList.toggle("hidden", name !== "gbif");
+  $("references-panel").classList.toggle("hidden", name !== "references");
+  if (name === "gbif")       GbifPage.show();
+  if (name === "references") ReferencesPage.mount();
+}
+
+document.querySelectorAll(".app-tab").forEach(t =>
+  t.addEventListener("click", () => showTab(t.dataset.view)));
+
+// Called when the active output folder changes, so per-root GBIF state refreshes.
+function onRootChanged() {
+  if (GbifPage.isMounted()) GbifPage.refresh();
+}
+
+// ══════════════════════════════════════════════════════════
+//  GBIF browser page
+//  Ported from IRIS_Electron/src/renderer/js/pages/gbif.js, rewired to this
+//  app: window.api.gbif.*, the global `state.rootDir` library scope, toast(),
+//  and the existing lightbox. The browser-session download mechanism (inline
+//  same-origin fetch + attachment capture + UA fallback) is preserved intact.
+// ══════════════════════════════════════════════════════════
+const GbifPage = (function () {
+  const HOME = "https://www.gbif.org/occurrence/search?occurrenceStatus=present&view=GALLERY&basisOfRecord=PRESERVED_SPECIMEN&mediaType=StillImage";
+  const BULK_CONCURRENCY = 16; // parallel image-download workers
+
+  // Same-origin fetch run INSIDE the hidden webview once it has navigated to the
+  // image URL — returns a data: URL of the original bytes (from cache, no re-hit).
+  const FETCH_SNIPPET = `(async () => {
+    const r = await fetch(location.href, { credentials: 'include' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (ct.startsWith('text/') || ct.includes('html') || ct.includes('json')) throw new Error('not-an-image:' + ct);
+    const b = await r.blob();
+    return await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => rej(fr.error || new Error('read failed'));
+      fr.readAsDataURL(b);
+    });
+  })()`;
+
+  const g = {
+    container: null, view: null, mounted: false, busy: false,
+    currentId: null, onSearch: false, bookmarks: [], menuOpen: false,
+    bulk: { running: false, cancel: false },
+  };
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // Plain-Chrome UA (default Electron UA with Electron/IRIS tokens stripped),
+  // used ONLY as a per-image fallback when a host rejects the Electron UA.
+  const CLEAN_UA = navigator.userAgent.replace(/\s*(?:Electron|IRIS)\/\S+/gi, "").replace(/\s{2,}/g, " ").trim();
+
+  // Images served with Content-Disposition: attachment become browser DOWNLOADS.
+  // The main process captures those silently and pushes the bytes here, keyed by
+  // URL, where the waiting downloadViaWebview resolves.
+  const pendingDownloads = new Map(); // imageUrl → resolve(dataUrl | null)
+  let downloadListenerReady = false;
+  function ensureDownloadListener() {
+    if (downloadListenerReady) return;
+    downloadListenerReady = true;
+    window.api.gbif.onDownload((data) => {
+      let key = pendingDownloads.has(data.url) ? data.url
+        : (Array.isArray(data.chain) ? data.chain.find(u => pendingDownloads.has(u)) : null);
+      if (!key) return;
+      const resolve = pendingDownloads.get(key);
+      pendingDownloads.delete(key);
+      resolve(data.ok && data.dataBase64 ? `data:image/jpeg;base64,${data.dataBase64}` : null);
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;",
+    }[c]));
+  }
+
+  function parseId(url) {
+    if (!url) return null;
+    let m = String(url).match(/occurrence\/(\d+)/);
+    if (m) return m[1];
+    m = String(url).match(/[?&]entity=o_(\d+)/);
+    if (m) return m[1];
+    return null;
+  }
+
+  function setStatus(msg) {
+    const el = g.container && g.container.querySelector("#gbif-status");
+    if (el) el.textContent = msg || "";
+  }
+
+  function updateActionButtons() {
+    const c = g.container;
+    if (!c) return;
+    const noRoot = !state.rootDir;
+    const busy = g.busy || g.bulk.running;
+
+    const add = c.querySelector("#gbif-add");
+    if (add) {
+      const onSpecimen = !!g.currentId;
+      add.disabled = busy || !onSpecimen || noRoot;
+      add.textContent = onSpecimen ? `＋ Add GBIF ${g.currentId} to Library` : "＋ Add to Library";
+      add.title = noRoot ? "Set an Output Root Folder in Settings first."
+        : onSpecimen ? "" : "Open a specimen occurrence first — click an image on GBIF.";
+      add.classList.toggle("ready", onSpecimen && !busy && !noRoot);
+    }
+    const all = c.querySelector("#gbif-import");
+    if (all) {
+      all.disabled = busy || !g.onSearch || noRoot;
+      all.title = noRoot ? "Set an Output Root Folder in Settings first."
+        : g.onSearch ? "Import images from this search (all up to 500, or a random subset)"
+        : "Open a GBIF search (gallery) first.";
+    }
+  }
+
+  function onNav(url) {
+    const u = url || (g.view && g.view.getURL()) || "";
+    g.currentId = parseId(u);
+    g.onSearch = /\/occurrence\/search/.test(u) || /\/occurrence\/gallery/.test(u);
+    const bar = g.container && g.container.querySelector("#gbif-url");
+    if (bar && document.activeElement !== bar) bar.value = u;
+    updateActionButtons();
+  }
+
+  // Download an image THROUGH THE BROWSER: a hidden webview (shared session)
+  // navigates to the image URL, then a same-origin fetch reads the bytes.
+  function downloadViaWebview(imageUrl, opts = {}) {
+    return new Promise((resolve, reject) => {
+      const fw = document.createElement("webview");
+      fw.setAttribute("partition", "persist:gbif"); // share cookies/clearance with the browse view
+      if (opts.userAgent) fw.setAttribute("useragent", opts.userAgent);
+      fw.className = "gbif-fetch-view";
+      let settled = false;
+      const finish = (fn, arg) => {
+        if (settled) return; settled = true;
+        clearTimeout(timer);
+        pendingDownloads.delete(imageUrl);
+        try { fw.remove(); } catch (_) {}
+        fn(arg);
+      };
+      const timer = setTimeout(() => finish(reject, new Error("Timed out downloading the image.")), 60000);
+
+      // Attachment case: navigation becomes a download; main captures the bytes.
+      pendingDownloads.set(imageUrl, (dataUrl) => {
+        if (dataUrl) finish(resolve, dataUrl);
+        else finish(reject, new Error("The image could not be downloaded."));
+      });
+
+      // Inline case: the image renders → same-origin fetch reads the bytes.
+      fw.addEventListener("did-finish-load", async () => {
+        try {
+          const dataUrl = await fw.executeJavaScript(FETCH_SNIPPET, true);
+          finish(resolve, dataUrl);
+        } catch (e) {
+          finish(reject, new Error("Could not read a valid image (" + (e && e.message || e) + ")."));
+        }
+      });
+      fw.addEventListener("did-fail-load", (e) => {
+        // errorCode -3 (ERR_ABORTED) == navigation turned into a download; wait
+        // for the capture event. Other main-frame errors are real failures.
+        if (e.isMainFrame && e.errorCode !== -3) {
+          finish(reject, new Error("The image failed to load in the browser (code " + e.errorCode + ")."));
+        }
+      });
+      document.body.appendChild(fw);
+      fw.src = imageUrl;
+    });
+  }
+
+  // Present the DEFAULT (Electron) UA first; only if that fails retry the same
+  // image once as plain Chrome (some hosts 403 the "Electron" UA).
+  async function fetchImageBytes(imageUrl) {
+    try {
+      return await downloadViaWebview(imageUrl);
+    } catch (_) {
+      if (!CLEAN_UA || CLEAN_UA === navigator.userAgent) throw _;
+      return await downloadViaWebview(imageUrl, { userAgent: CLEAN_UA });
+    }
+  }
+
+  async function addToLibrary() {
+    if (g.busy) return;
+    if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
+    const id = parseId(g.view && g.view.getURL());
+    if (!id) {
+      toast("Open a specimen occurrence on GBIF (click an image), then Add.", "error");
+      return;
+    }
+    g.busy = true; updateActionButtons();
+    try {
+      setStatus(`Looking up GBIF ${id}…`);
+      const meta = await window.api.gbif.getOccurrence(state.rootDir, id);
+      if (meta.duplicate) { toast(`GBIF ${id} is already in this library.`); return; }
+      if (!meta.has_image || !meta.image_url) {
+        toast("This GBIF occurrence has no downloadable image.", "error"); return;
+      }
+      setStatus("Downloading image via the browser…");
+      await window.api.gbif.setCapture(true);
+      let dataUrl;
+      try { dataUrl = await fetchImageBytes(meta.image_url); }
+      finally { window.api.gbif.setCapture(false); }
+      setStatus("Saving to the library…");
+      const row = await window.api.gbif.saveImport(state.rootDir, id, dataUrl);
+      const name = row.scientific_name || meta.scientific_name || "specimen";
+      toast(`Added GBIF ${id} — ${name} — to the library.`);
+    } catch (err) {
+      toast(err.message || "Import failed.", "error");
+    } finally {
+      g.busy = false; setStatus(""); updateActionButtons();
+    }
+  }
+
+  // --- bulk import: download images from the current search ----------------
+  function sample(arr, n) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a.slice(0, Math.max(0, Math.min(n, a.length)));
+  }
+
+  async function importFromSearch() {
+    if (g.busy || g.bulk.running) return;
+    if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
+    const url = g.view && g.view.getURL();
+    if (!/\/occurrence\/(search|gallery)/.test(url || "")) {
+      toast("Open a GBIF search (gallery) first.", "error"); return;
+    }
+    g.busy = true; updateActionButtons(); setStatus("Enumerating search results…");
+    let res;
+    try {
+      res = await window.api.gbif.enumerateSearch(state.rootDir, url);
+    } catch (err) {
+      toast(err.message || "Could not read the search.", "error");
+      return;
+    } finally {
+      g.busy = false; setStatus(""); updateActionButtons();
+    }
+
+    const occ = res.occurrences || [];
+    if (!occ.length) { toast("No images found for this search.", "error"); return; }
+    const pending = occ.filter(o => !o.already_imported);
+    const alreadyIds = occ.filter(o => o.already_imported).map(o => o.gbif_id);
+
+    const choice = await promptImport({
+      total: res.total, found: occ.length, pending: pending.length,
+      already: alreadyIds.length, alreadyIds, capped: res.capped,
+    });
+    if (!choice) return;
+    const items = choice.mode === "subset" ? sample(pending, choice.n) : pending;
+    if (!items.length) { toast("Nothing new to import."); return; }
+    runBulk(items);
+  }
+
+  function promptImport(info) {
+    return new Promise((resolve) => {
+      let rootEl = document.getElementById("modal-root");
+      if (!rootEl) { rootEl = document.createElement("div"); rootEl.id = "modal-root"; document.body.appendChild(rootEl); }
+      const maxN = Math.max(1, info.pending);
+      const defN = Math.min(20, maxN);
+      const noPending = info.pending === 0;
+      const already = info.already ? ` <span class="muted">(${info.already} already imported)</span>` : "";
+      const capNote = info.capped
+        ? `<p class="muted small">Your search matches ${Number(info.total).toLocaleString()} imaged records — capped at the first ${info.found}. Narrow the search to reach the rest.</p>`
+        : "";
+      const dupIds = info.alreadyIds || [];
+      const dupBlock = dupIds.length ? `
+        <div class="gbif-dups">
+          <div class="gbif-dups-head">${dupIds.length} already in this library — these will be skipped (not re-downloaded):</div>
+          <div class="gbif-dups-ids">${dupIds.map(id => `<span class="dup-id">${esc(id)}</span>`).join("")}</div>
+        </div>` : "";
+      const onKey = (e) => { if (e.key === "Escape") done(null); };
+      const done = (v) => { document.removeEventListener("keydown", onKey); rootEl.innerHTML = ""; resolve(v); };
+
+      rootEl.innerHTML = `
+        <div class="modal-backdrop gbif-modal-backdrop" data-backdrop>
+          <div class="modal-card" role="dialog" aria-modal="true">
+            <div class="modal-title">Import from GBIF search</div>
+            <div class="modal-body">
+              <p class="gbif-advisory">Specimen summaries of more than 500 images may not perform well.
+                Please narrow your search or use the download-subset option below.
+                <strong>500 images is the maximum per import.</strong></p>
+              <p>Found <strong>${info.found}</strong> imaged specimen(s)${already}.</p>
+              ${capNote}
+              ${dupBlock}
+              ${noPending ? '<p class="muted">All of these are already imported into this library — nothing new to download.</p>' : `
+              <div class="gbif-subset-row">
+                <label>Random subset of
+                  <input type="number" id="gbif-subset-n" min="1" max="${maxN}" value="${defN}" />
+                  of ${info.pending} new image(s)
+                </label>
+              </div>`}
+            </div>
+            <div class="modal-actions">
+              <button class="btn ghost sm" data-act="cancel">Cancel</button>
+              ${noPending ? "" : `<button class="btn ghost sm" data-act="subset">Download subset</button>`}
+              ${noPending ? "" : `<button class="btn sm" data-act="all">Download all ${info.pending}</button>`}
+            </div>
+          </div>
+        </div>`;
+
+      const q = (s) => rootEl.querySelector(s);
+      const bd = q("[data-backdrop]");
+      bd.addEventListener("click", (e) => { if (e.target === bd) done(null); });
+      const cancel = q('[data-act="cancel"]'); if (cancel) cancel.addEventListener("click", () => done(null));
+      const allBtn = q('[data-act="all"]'); if (allBtn) allBtn.addEventListener("click", () => done({ mode: "all" }));
+      const subBtn = q('[data-act="subset"]');
+      if (subBtn) subBtn.addEventListener("click", () => {
+        const inp = q("#gbif-subset-n");
+        let n = parseInt(inp && inp.value, 10);
+        if (!Number.isFinite(n) || n < 1) n = defN;
+        done({ mode: "subset", n: Math.min(n, maxN) });
+      });
+      document.addEventListener("keydown", onKey);
+    });
+  }
+
+  // Download + save in parallel with a bounded worker pool (up to 16 at once).
+  async function runBulk(items) {
+    g.bulk = { running: true, cancel: false };
+    showBulk();
+    updateActionButtons();
+    await window.api.gbif.setCapture(true);
+    const total = items.length;
+    let cursor = 0, completed = 0, ok = 0, skip = 0, fail = 0;
+    updateBulk(0, total, { ok, skip, fail });
+
+    const worker = async (workerIdx) => {
+      await sleep(workerIdx * 80); // small startup stagger
+      while (!g.bulk.cancel) {
+        const i = cursor++;
+        if (i >= total) break;
+        const it = items[i];
+        try {
+          const dataUrl = await fetchImageBytes(it.image_url);
+          const row = await window.api.gbif.saveImport(state.rootDir, it.gbif_id, dataUrl);
+          if (row && row.duplicate) skip++; else ok++;
+        } catch (_) {
+          fail++;
+        }
+        completed++;
+        updateBulk(completed, total, { ok, skip, fail });
+      }
+    };
+
+    const n = Math.min(BULK_CONCURRENCY, total);
+    await Promise.all(Array.from({ length: n }, (_, k) => worker(k)));
+    window.api.gbif.setCapture(false);
+
+    const cancelled = g.bulk.cancel;
+    g.bulk = { running: false, cancel: false };
+    hideBulk();
+    updateActionButtons();
+    toast(
+      `Import ${cancelled ? "cancelled" : "complete"}: ${ok} added` +
+      `${skip ? `, ${skip} skipped` : ""}${fail ? `, ${fail} failed` : ""}.`,
+      (fail && !ok) ? "error" : undefined
+    );
+  }
+
+  function showBulk() {
+    const c = g.container; if (!c) return;
+    const p = c.querySelector("#gbif-progress");
+    if (p) p.hidden = false;
+    const btn = c.querySelector("#gbif-progress-cancel");
+    if (btn) { btn.disabled = false; btn.textContent = "Cancel"; }
+    const fill = c.querySelector("#gbif-progress-fill");
+    if (fill) fill.style.width = "0%";
+  }
+  function hideBulk() {
+    const p = g.container && g.container.querySelector("#gbif-progress");
+    if (p) p.hidden = true;
+  }
+  function updateBulk(completed, total, tally) {
+    const c = g.container; if (!c) return;
+    const pct = total ? Math.round(completed / total * 100) : 0;
+    const fill = c.querySelector("#gbif-progress-fill");
+    const text = c.querySelector("#gbif-progress-text");
+    const sub = c.querySelector("#gbif-progress-sub");
+    if (fill) fill.style.width = `${pct}%`;
+    if (text) text.textContent = `Importing ${completed} of ${total}…`;
+    if (sub) sub.textContent =
+      `${tally.ok} added${tally.skip ? `, ${tally.skip} skipped` : ""}` +
+      `${tally.fail ? `, ${tally.fail} failed` : ""} · up to ${Math.min(BULK_CONCURRENCY, total)} at once`;
+  }
+
+  // --- bookmarks (saved GBIF searches) -------------------------------------
+  async function loadBookmarks() {
+    if (!state.rootDir) { g.bookmarks = []; renderBookmarksMenu(); return; }
+    try { g.bookmarks = await window.api.gbif.bookmarks(state.rootDir); }
+    catch (_) { g.bookmarks = []; }
+    renderBookmarksMenu();
+  }
+
+  function renderBookmarksMenu() {
+    const menu = g.container && g.container.querySelector("#gbif-bm-menu");
+    if (!menu) return;
+    const bms = g.bookmarks;
+    menu.innerHTML = bms.length
+      ? bms.map(b => `
+          <div class="split-menu-item" data-bm-url="${esc(b.url)}" title="${esc(b.url)}">
+            <span class="bm-label">${esc(b.label || b.url)}</span>
+            <button class="bm-del" data-bm-del="${b.id}" title="Remove bookmark">✕</button>
+          </div>`).join("")
+      : '<div class="split-menu-empty">No saved searches yet.</div>';
+    menu.querySelectorAll("[data-bm-url]").forEach(el => el.addEventListener("click", (e) => {
+      if (e.target.closest("[data-bm-del]")) return;
+      g.view.loadURL(el.dataset.bmUrl);
+      toggleMenu(false);
+    }));
+    menu.querySelectorAll("[data-bm-del]").forEach(b => b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await window.api.gbif.removeBookmark(Number(b.dataset.bmDel));
+        await loadBookmarks();
+      } catch (err) { toast(err.message, "error"); }
+    }));
+  }
+
+  async function bookmarkCurrent() {
+    if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
+    const url = g.view && g.view.getURL();
+    if (!url || !/^https?:/i.test(url)) { toast("Browse GBIF first, then bookmark.", "error"); return; }
+    try {
+      const bm = await window.api.gbif.bookmark(state.rootDir, url);
+      await loadBookmarks();
+      toast(bm.duplicate ? "Already bookmarked." : "Search bookmarked.");
+    } catch (err) { toast(err.message, "error"); }
+  }
+
+  function toggleMenu(open) {
+    const menu = g.container && g.container.querySelector("#gbif-bm-menu");
+    if (!menu) return;
+    g.menuOpen = open == null ? !g.menuOpen : open;
+    menu.hidden = !g.menuOpen;
+    if (g.menuOpen) document.addEventListener("mousedown", onDocClick);
+    else document.removeEventListener("mousedown", onDocClick);
+  }
+  function onDocClick(e) {
+    const split = g.container && g.container.querySelector("#gbif-bm");
+    if (split && split.contains(e.target)) return;
+    toggleMenu(false);
+  }
+
+  function wire() {
+    const c = g.container;
+    const view = c.querySelector("#gbif-view");
+    g.view = view;
+
+    c.querySelector("#gbif-back").addEventListener("click", () => { if (view.canGoBack()) view.goBack(); });
+    c.querySelector("#gbif-fwd").addEventListener("click", () => { if (view.canGoForward()) view.goForward(); });
+    c.querySelector("#gbif-reload").addEventListener("click", () => view.reload());
+    c.querySelector("#gbif-home").addEventListener("click", () => view.loadURL(HOME));
+    c.querySelector("#gbif-add").addEventListener("click", addToLibrary);
+    c.querySelector("#gbif-import").addEventListener("click", importFromSearch);
+    c.querySelector("#gbif-progress-cancel").addEventListener("click", () => {
+      g.bulk.cancel = true;
+      const btn = c.querySelector("#gbif-progress-cancel");
+      if (btn) { btn.disabled = true; btn.textContent = "Cancelling…"; }
+    });
+    c.querySelector("#gbif-bm-add").addEventListener("click", bookmarkCurrent);
+    c.querySelector("#gbif-bm-toggle").addEventListener("click", () => toggleMenu());
+
+    const url = c.querySelector("#gbif-url");
+    url.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      let v = url.value.trim();
+      if (!v) return;
+      if (/^\d+$/.test(v)) v = `https://www.gbif.org/occurrence/${v}`;
+      else if (!/^https?:\/\//i.test(v)) v = `https://www.gbif.org/occurrence/search?q=${encodeURIComponent(v)}`;
+      view.loadURL(v);
+    });
+
+    view.addEventListener("did-navigate", (e) => onNav(e.url));
+    view.addEventListener("did-navigate-in-page", (e) => onNav(e.url));
+    view.addEventListener("did-stop-loading", () => onNav(view.getURL()));
+    view.addEventListener("page-title-updated", () => onNav(view.getURL()));
+  }
+
+  function mount() {
+    if (g.mounted) return;
+    g.container = document.getElementById("gbif-panel");
+    ensureDownloadListener();
+
+    g.container.innerHTML = `
+      <div class="page-toolbar gbif-toolbar">
+        <div class="page-head"><span class="page-label">GBIF</span><span class="page-meta">Browse gbif.org · import specimens</span></div>
+        <div class="spacer"></div>
+        <div class="split-btn" id="gbif-bm">
+          <button class="btn ghost sm split-main" id="gbif-bm-add" title="Save the current GBIF search">☆ Bookmark this Search</button>
+          <button class="btn ghost sm split-caret" id="gbif-bm-toggle" title="Saved searches" aria-label="Saved searches">▾</button>
+          <div class="split-menu" id="gbif-bm-menu" hidden></div>
+        </div>
+        <button class="btn ghost" id="gbif-import" disabled>⤓ Import…</button>
+        <button class="btn" id="gbif-add" disabled>＋ Add to Library</button>
+      </div>
+      <div class="gbif-chrome">
+        <div class="gbif-nav">
+          <button class="btn ghost sm icon-btn" id="gbif-back" title="Back">‹</button>
+          <button class="btn ghost sm icon-btn" id="gbif-fwd" title="Forward">›</button>
+          <button class="btn ghost sm icon-btn" id="gbif-reload" title="Reload">⟳</button>
+          <button class="btn ghost sm icon-btn" id="gbif-home" title="GBIF specimen gallery">⌂</button>
+        </div>
+        <input class="input sm gbif-urlbar" id="gbif-url" placeholder="Search GBIF, or paste an occurrence URL / ID…" />
+        <span class="gbif-status mono small" id="gbif-status"></span>
+      </div>
+      <div class="page-body gbif-body">
+        <webview id="gbif-view" class="gbif-view" src="${esc(HOME)}" partition="persist:gbif" allowpopups></webview>
+        <div class="gbif-progress" id="gbif-progress" hidden>
+          <div class="gbif-progress-head">
+            <span id="gbif-progress-text">Importing…</span>
+            <button class="btn ghost sm" id="gbif-progress-cancel">Cancel</button>
+          </div>
+          <div class="gbif-progress-track"><div class="gbif-progress-fill" id="gbif-progress-fill"></div></div>
+          <div class="gbif-progress-sub mono small" id="gbif-progress-sub"></div>
+        </div>
+      </div>
+    `;
+    wire();
+    g.mounted = true;
+    updateActionButtons();
+    loadBookmarks();
+  }
+
+  // Shown on tab activation: mount once, then refresh per-root state.
+  function show() { mount(); refresh(); }
+  function refresh() { if (!g.mounted) return; onNav(g.view && g.view.getURL()); loadBookmarks(); }
+  function reset() { /* nothing to tear down; webview persists across sessions */ }
+
+  return { show, refresh, reset, isMounted: () => g.mounted };
+})();
+
+// ══════════════════════════════════════════════════════════
+//  References page
+//  Ported from IRIS_Electron/src/renderer/js/pages/references.js, rewired to
+//  window.api.gbif + gbif_sources rows + local file thumbnails + the app's
+//  lightbox. CSV exports the stored GBIF fields (no separate Library items).
+// ══════════════════════════════════════════════════════════
+const ReferencesPage = (function () {
+  const r = { container: null, rows: [] };
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;",
+    }[c]));
+  }
+  function fmtDate(s) { return s ? String(s).replace("T", " ").replace(/\.\d+Z?$/, "").replace("Z", " UTC") : "—"; }
+  function fileUri(p) { return p ? "file://" + String(p).replace(/\\/g, "/") : null; }
+
+  async function load() {
+    if (!state.rootDir) { r.rows = []; return; }
+    try {
+      r.rows = await window.api.gbif.list(state.rootDir);
+    } catch (err) {
+      r.rows = [];
+      toast(`Could not load references: ${err.message}`, "error");
+    }
+  }
+
+  function render() {
+    const c = r.container;
+    if (!c) return;
+    const rows = r.rows;
+
+    c.innerHTML = `
+      <div class="page-toolbar ref-toolbar">
+        <div class="page-head"><span class="page-label">References</span><span class="page-meta">${rows.length ? `${rows.length} external source${rows.length === 1 ? "" : "s"}` : "External sources"}</span></div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" id="ref-refresh">Refresh</button>
+        <div class="split-btn" id="ref-export">
+          <button class="btn ghost sm split-main" id="ref-export-main" title="Download all citations as plain text">⤓ Export</button>
+          <button class="btn ghost sm split-caret" id="ref-export-toggle" title="Export options" aria-label="Export options">▾</button>
+          <div class="split-menu" id="ref-export-menu" hidden>
+            <div class="split-menu-item" data-export="txt"><span class="bm-label">Citations — plain text (.txt)</span></div>
+            <div class="split-menu-item" data-export="ris"><span class="bm-label">Reference manager (.ris)</span></div>
+            <div class="split-menu-item" data-export="csv"><span class="bm-label">Full table — all fields (.csv)</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="page-body ref-body">
+        ${!state.rootDir ? `
+          <div class="page-empty">
+            <div class="glyph">§</div>
+            <h2>No output folder open</h2>
+            <p>Set an <strong>Output Root Folder</strong> in Settings, then import specimens from the GBIF tab.</p>
+          </div>`
+        : rows.length === 0 ? `
+          <div class="page-empty">
+            <div class="glyph">§</div>
+            <h2>No references yet</h2>
+            <p>Open the <strong>GBIF</strong> tab, find a specimen, and click
+              <em>Add to Library</em>. Each imported occurrence — image, id, URL and
+              citation — is recorded here.</p>
+          </div>` : `
+          <div class="ref-list">
+            ${rows.map(renderRow).join("")}
+          </div>`}
+      </div>`;
+
+    const rf = c.querySelector("#ref-refresh");
+    if (rf) rf.addEventListener("click", async () => { await load(); render(); });
+    wire();
+  }
+
+  function renderRow(row) {
+    const thumb = fileUri(row.file_path);
+    return `
+      <div class="ref-row" data-id="${row.id}">
+        <div class="ref-thumb">
+          ${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('img-error')"/>` : "<span>§</span>"}
+        </div>
+        <div class="ref-main">
+          <div class="ref-line1">
+            <span class="ref-badge">GBIF</span>
+            <span class="ref-id mono">GBIF ID ${esc(row.gbif_id)}</span>
+            ${row.scientific_name ? `<span class="ref-sci">${esc(row.scientific_name)}</span>` : ""}
+            ${row.country ? `<span class="ref-meta">· ${esc(row.country)}</span>` : ""}
+          </div>
+          ${row.occurrence_url ? `<div class="ref-url">
+            <a href="${esc(row.occurrence_url)}" target="_blank" rel="noopener noreferrer" class="ref-link">${esc(row.occurrence_url)}</a>
+          </div>` : ""}
+          <div class="ref-citation">${esc(row.citation || "—")}</div>
+          <div class="ref-sub mono small">
+            imported ${esc(fmtDate(row.created_at))}
+            ${row.dataset_doi ? ` · dataset ${esc(row.dataset_doi)}` : ""}
+            ${row.image_url ? ` · <a href="${esc(row.image_url)}" target="_blank" rel="noopener noreferrer" class="ref-link">image source</a>` : ""}
+          </div>
+        </div>
+        <div class="ref-actions">
+          <button class="btn ghost sm" data-copy="${row.id}">Copy citation</button>
+          ${thumb ? `<button class="btn ghost sm" data-view="${row.id}">View image</button>` : ""}
+          <button class="btn danger sm" data-del="${row.id}">Remove</button>
+        </div>
+      </div>`;
+  }
+
+  // --- export -------------------------------------------------------------
+  function slug() {
+    const base = state.rootDir ? state.rootDir.split(/[\\/]/).filter(Boolean).pop() : "references";
+    return (base || "references").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "references";
+  }
+
+  function downloadFile(filename, text, mime) {
+    const blob = new Blob([text], { type: mime || "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+  }
+
+  function exportTxt() {
+    if (!r.rows.length) return toast("No references to export.", "error");
+    const txt = r.rows.map(row => (row.citation || row.occurrence_url || `GBIF ${row.gbif_id}`).replace(/\s*\n\s*/g, " ")).join("\n");
+    downloadFile(`${slug()}-citations.txt`, txt);
+    toast(`Exported ${r.rows.length} citation(s).`);
+  }
+
+  function risRecord(row) {
+    const clean = (v) => String(v == null ? "" : v).replace(/[\r\n]+/g, " ").trim();
+    const year = (String(row.citation || "").match(/\((\d{4})\)/) || [])[1] || String(row.created_at || "").slice(0, 4);
+    const L = ["TY  - DATA"];
+    if (row.scientific_name) L.push(`TI  - ${clean(row.scientific_name)}`);
+    if (row.dataset_title) L.push(`T2  - ${clean(row.dataset_title)}`);
+    if (year) L.push(`PY  - ${year}`);
+    if (row.dataset_doi) L.push(`DO  - ${clean(row.dataset_doi)}`);
+    if (row.occurrence_url) L.push(`UR  - ${clean(row.occurrence_url)}`);
+    if (row.country) L.push(`AD  - ${clean(row.country)}`);
+    L.push("DP  - GBIF.org");
+    L.push(`AN  - ${clean(row.gbif_id)}`);
+    if (row.citation) L.push(`N1  - ${clean(row.citation)}`);
+    L.push("ER  - ");
+    return L.join("\r\n");
+  }
+  function exportRis() {
+    if (!r.rows.length) return toast("No references to export.", "error");
+    const ris = r.rows.map(risRecord).join("\r\n\r\n") + "\r\n";
+    downloadFile(`${slug()}-references.ris`, ris, "application/x-research-info-systems");
+    toast(`Exported ${r.rows.length} reference(s) as RIS.`);
+  }
+
+  function csvCell(v) {
+    if (v == null) return "";
+    let s = typeof v === "object" ? JSON.stringify(v) : String(v);
+    if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function exportCsv() {
+    if (!r.rows.length) return toast("No references to export.", "error");
+    const header = ["source", "gbif_id", "citation", "scientific_name", "occurrence_url", "image_url",
+      "dataset_title", "dataset_doi", "catalog_number", "country", "latitude", "longitude", "imported_at", "file_path"];
+    const lines = [header.map(csvCell).join(",")];
+    for (const row of r.rows) {
+      lines.push([
+        "GBIF", row.gbif_id, row.citation, row.scientific_name, row.occurrence_url, row.image_url,
+        row.dataset_title, row.dataset_doi, row.catalog_number, row.country, row.latitude, row.longitude,
+        row.created_at, row.file_path,
+      ].map(csvCell).join(","));
+    }
+    // BOM so Excel reads UTF-8 correctly.
+    downloadFile(`${slug()}-references.csv`, "﻿" + lines.join("\r\n"), "text/csv;charset=utf-8");
+    toast(`Exported ${r.rows.length} reference(s) as CSV.`);
+  }
+
+  function toggleExportMenu(open) {
+    const menu = r.container && r.container.querySelector("#ref-export-menu");
+    if (!menu) return;
+    const next = open == null ? menu.hidden : open;
+    menu.hidden = !next;
+    if (next) document.addEventListener("mousedown", onExportDocClick);
+    else document.removeEventListener("mousedown", onExportDocClick);
+  }
+  function onExportDocClick(e) {
+    const split = r.container && r.container.querySelector("#ref-export");
+    if (split && split.contains(e.target)) return;
+    toggleExportMenu(false);
+  }
+
+  function wire() {
+    const c = r.container;
+
+    const exportMain = c.querySelector("#ref-export-main");
+    if (exportMain) exportMain.addEventListener("click", exportTxt);
+    const exportToggle = c.querySelector("#ref-export-toggle");
+    if (exportToggle) exportToggle.addEventListener("click", () => toggleExportMenu());
+    c.querySelectorAll("#ref-export-menu [data-export]").forEach(el => el.addEventListener("click", () => {
+      toggleExportMenu(false);
+      const kind = el.dataset.export;
+      if (kind === "txt") exportTxt();
+      else if (kind === "ris") exportRis();
+      else if (kind === "csv") exportCsv();
+    }));
+
+    c.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", async () => {
+      const row = r.rows.find(x => x.id === Number(b.dataset.copy));
+      if (!row) return;
+      try { await navigator.clipboard.writeText(row.citation || ""); toast("Citation copied."); }
+      catch (_) { toast("Could not copy.", "error"); }
+    }));
+    c.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => {
+      const row = r.rows.find(x => x.id === Number(b.dataset.view));
+      if (!row || !row.file_path) return;
+      openLightbox(fileUri(row.file_path), `GBIF ${row.gbif_id}${row.scientific_name ? " — " + row.scientific_name : ""}`);
+    }));
+    c.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+      const row = r.rows.find(x => x.id === Number(b.dataset.del));
+      if (!row) return;
+      if (!confirm(`Remove the GBIF ${row.gbif_id} reference? This also deletes the downloaded image from the library folder.`)) return;
+      try {
+        await window.api.gbif.remove(row.id);
+        await load();
+        render();
+        toast("Reference removed.");
+      } catch (err) { toast(err.message, "error"); }
+    }));
+  }
+
+  async function mount() {
+    r.container = document.getElementById("references-panel");
+    r.container.innerHTML = '<div class="page-body"><div class="ref-loading">Loading…</div></div>';
+    await load();
+    render();
+  }
+
+  return { mount };
+})();
 
 

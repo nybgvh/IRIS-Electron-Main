@@ -1,3 +1,9 @@
+# ============================================================================
+# DISABLED — VoucherVision now runs natively over HTTP in the Electron main
+# process (vouchervision-client.js + runVoucherNative in main.js). This Python
+# script is no longer invoked. Original source preserved below (inert).
+# ============================================================================
+r'''
 """
 IRIS Voucher Pipeline
 Spawned by the Electron app. Copies images to pics/, runs VoucherVision,
@@ -79,3 +85,4 @@ except Exception as e:
 json_files = list(species_dir.glob("*.json"))
 emit_progress("complete", f"VoucherVision finished — {len(json_files)} JSON files generated")
 emit_done()
+'''

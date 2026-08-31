@@ -1,3 +1,9 @@
+# ============================================================================
+# DISABLED — Red List summaries now run natively over HTTP in the Electron main
+# process (gemini-client.js + runRedlistNative in main.js). This Python script is
+# no longer invoked. Original source preserved below (inert) for reference.
+# ============================================================================
+r'''
 """
 IRIS Red List Pipeline
 Spawned by the Electron app. Streams progress via stdout as JSON lines.
@@ -255,3 +261,4 @@ for d in dirs:
     else:  failed    += 1
 
 emit_finish(total=len(dirs), succeeded=succeeded, failed=failed)
+'''
