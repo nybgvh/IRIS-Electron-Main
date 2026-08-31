@@ -1,23 +1,20 @@
+# ============================================================================
+# DISABLED — VoucherVision now runs natively over HTTP in the Electron main
+# process (vouchervision-client.js + runVoucherNative in main.js). This Python
+# script is no longer invoked. Original source preserved below (inert).
+# ============================================================================
+r'''
 """
-IRIS Voucher Pipeline — Direct Gemini Vision
-Sends herbarium images directly to Gemini with the VoucherVision prompt.
-No LeafMachine2, no VoucherVision library, no PyTorch required.
+IRIS Voucher Pipeline
+Spawned by the Electron app. Copies images to pics/, runs VoucherVision,
+then streams progress via stdout as JSON lines.
 
-Usage: python voucher_pipeline.py <species_dir> <gemini_api_key>
+Usage: python voucher_pipeline.py <species_dir> <auth_token> <gemini_api_key>
 """
 
 import sys
-import os
 import json
-import logging
-import warnings
-warnings.filterwarnings("ignore")
-logging.getLogger("google.genai").setLevel(logging.ERROR)
-logging.getLogger("google.ai.generativelanguage").setLevel(logging.ERROR)
-logging.getLogger("google.api_core").setLevel(logging.ERROR)
-logging.disable(logging.WARNING)
-import base64
-import re
+import shutil
 from pathlib import Path
 
 # ── Stdout helpers ────────────────────────────────────────────────────────────
@@ -30,242 +27,62 @@ def emit_progress(status, message=""):
 def emit_error(message):
     emit("error", message=message)
 
-def emit_done(**kwargs):
-    emit("done", **kwargs)
+def emit_done():
+    emit("done")
 
 # ── Args ──────────────────────────────────────────────────────────────────────
-if len(sys.argv) < 3:
-    emit("fatal", message="Usage: voucher_pipeline.py <species_dir> <gemini_api_key>")
+if len(sys.argv) < 4:
+    emit("fatal", message="Usage: voucher_pipeline.py <species_dir> <auth_token> <gemini_api_key>")
     sys.exit(1)
 
-species_dir    = Path(sys.argv[1]).resolve()
-gemini_api_key = sys.argv[2]
+species_dir    = Path(sys.argv[1])
+auth_token     = sys.argv[2]
+gemini_api_key = sys.argv[3]
 
 if not species_dir.is_dir():
     emit("fatal", message=f"Species directory not found: {species_dir}")
     sys.exit(1)
 
 pics_dir = species_dir / "pics"
-IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".jfif", ".bmp", ".heic", ".heif", ".jp2"}
-images   = sorted([
-    f for f in pics_dir.iterdir()
-    if f.suffix.lower() in IMG_EXTS
-]) if pics_dir.exists() else []
+
+# ── Dependency check ──────────────────────────────────────────────────────────
+try:
+    from VoucherVision import process_vouchers
+except ImportError:
+    emit("fatal", message="VoucherVision not installed. Run: pip install VoucherVision")
+    sys.exit(1)
+
+# ── Count images ──────────────────────────────────────────────────────────────
+IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
+images = [f for f in pics_dir.iterdir() if f.suffix.lower() in IMG_EXTS] if pics_dir.exists() else []
 
 if not images:
     emit("fatal", message=f"No images found in {pics_dir}")
     sys.exit(1)
 
-# ── Dependencies ──────────────────────────────────────────────────────────────
+emit_progress("start", f"Found {len(images)} images in pics/ — starting VoucherVision…")
+
+# ── Run VoucherVision ─────────────────────────────────────────────────────────
 try:
-    from google import genai
-    from google.genai import types
-except ImportError:
-    emit("fatal", message="google-genai not installed. Run: pip install google-genai")
+    emit_progress("processing", "Sending images to VoucherVision (this may take a while)…")
+
+    process_vouchers(
+        server="https://vouchervision-go-738307415303.us-central1.run.app/",
+        output_dir=str(species_dir) + "/",
+        directory=str(pics_dir) + "/",
+        prompt="SLTPvM_geolocate.yaml",
+        llm_model="gemini-3.1-pro-preview",
+        verbose=True,
+        save_to_xlsx=True,
+        auth_token=auth_token,
+        gemini_api_key=gemini_api_key,
+    )
+except Exception as e:
+    emit_error(f"VoucherVision error: {e}")
     sys.exit(1)
 
-try:
-    from PIL import Image as PILImage
-except ImportError:
-    emit("fatal", message="Pillow not installed. Run: pip install Pillow")
-    sys.exit(1)
-
-try:
-    from pillow_heif import register_heif_opener
-    register_heif_opener()
-except ImportError:
-    pass  # heic/heif won't be supported but won't crash
-
-# ── Convert and resize images ─────────────────────────────────────────────────
-# Raise Pillow's decompression bomb limit for large herbarium scans
-PILImage.MAX_IMAGE_PIXELS = None  # remove limit entirely
-
-MAX_PIXELS = 4096 * 4096  # ~16MP — sufficient for Gemini, avoids timeouts
-
-converted = 0
-jpg_images = []
-for img_path in images:
-    target = img_path.with_suffix(".jpg") if img_path.suffix.lower() != ".jpg" else img_path
-    try:
-        with PILImage.open(img_path) as im:
-            im_rgb = im.convert("RGB")
-            # Resize if too large
-            w, h = im_rgb.size
-            if w * h > MAX_PIXELS:
-                scale = (MAX_PIXELS / (w * h)) ** 0.5
-                im_rgb = im_rgb.resize((int(w * scale), int(h * scale)), PILImage.LANCZOS)
-            if img_path.suffix.lower() not in {".jpg", ".jpeg"} or not target.exists():
-                im_rgb.save(target, "JPEG", quality=92)
-                if img_path != target:
-                    converted += 1
-            else:
-                # Re-save existing JPG if it needs resizing
-                orig_w, orig_h = w, h
-                if orig_w * orig_h > MAX_PIXELS:
-                    im_rgb.save(target, "JPEG", quality=92)
-        jpg_images.append(target)
-    except Exception as e:
-        emit_progress("warn", f"Could not process {img_path.name}: {e}")
-
-images = jpg_images
-if not images:
-    emit("fatal", message="No usable images after processing.")
-    sys.exit(1)
-
-emit_progress("start", f"Processing {len(images)} image(s)…")
-
-# ── Gemini setup ──────────────────────────────────────────────────────────────
-client = genai.Client(api_key=gemini_api_key)
-
-# ── Prompt ────────────────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are a specialist in digitising natural history museum herbarium specimen labels.
-
-Your task is to extract all text from this herbarium specimen image and return it as a structured JSON object.
-
-INSTRUCTIONS:
-1. Extract all visible text from labels, barcodes, and annotations on the specimen sheet.
-2. Map the extracted text to the appropriate JSON fields below.
-3. Handwritten text appears between guillemet quotes «like this» in OCR — include the content only, not the markers.
-4. Stricken/redacted text appears between section signs §like this§ — include in identificationHistory only.
-5. Leave fields as empty strings if the information is not present.
-6. Only return a valid JSON object — no explanation, no markdown fences.
-7. After extracting fields, if decimalLatitude and decimalLongitude are empty, infer coordinates from the locality information using your geographic knowledge. Only infer if specific enough (city, landmark, park, intersection). Use 'verbatim' in inferredGPSConfidence if coordinates appear on the label, 'high' for specific locations, 'medium' for counties, 'low' for states/provinces, 'na' if too vague.
-
-Return this exact JSON structure:
-{
-  "catalogNumber": "",
-  "scientificName": "",
-  "genus": "",
-  "specificEpithet": "",
-  "scientificNameAuthorship": "",
-  "collectedBy": "",
-  "collectorNumber": "",
-  "identifiedBy": "",
-  "identifiedDate": "",
-  "identifiedConfidence": "",
-  "identifiedRemarks": "",
-  "identificationHistory": "",
-  "verbatimCollectionDate": "",
-  "collectionDate": "",
-  "collectionDateEnd": "",
-  "habitat": "",
-  "specimenDescription": "",
-  "cultivated": "",
-  "continent": "",
-  "country": "",
-  "stateProvince": "",
-  "county": "",
-  "locality": "",
-  "verbatimCoordinates": "",
-  "decimalLatitude": "",
-  "decimalLongitude": "",
-  "inferredGPSConfidence": "",
-  "minimumElevationInMeters": "",
-  "maximumElevationInMeters": "",
-  "elevationUnits": "",
-  "multipleBarcodes": "",
-  "additionalText": ""
-}"""
-
-# ── Process each image ────────────────────────────────────────────────────────
-emit_progress("processing", f"Transcribing {len(images)} image(s) with Gemini — this may take a few minutes…")
-
-output_dir = species_dir / "vv_run" / "Transcription" / "Individual"
-output_dir.mkdir(parents=True, exist_ok=True)
-
-succeeded = 0
-failed    = 0
-
-total = len(images)
-for idx, img_path in enumerate(images, 1):
-    stem = img_path.stem
-    out_path = output_dir / f"{stem}.json"
-
-    emit_progress("processing", f"[{idx}/{total}] {img_path.name}")
-
-    if out_path.exists():
-        emit_progress("processing", f"[{idx}/{total}] {img_path.name} — already transcribed, skipping.")
-        succeeded += 1
-        continue
-
-    try:
-        # Load image
-        try:
-            with PILImage.open(img_path) as im:
-                img_rgb = im.convert("RGB")
-        except Exception as img_err:
-            emit_progress("warn", f"[{idx}/{total}] {img_path.name} — could not open image ({img_err}). File may be corrupted or in an unsupported format.")
-            failed += 1
-            continue
-
-        # Send to Gemini
-        response = client.models.generate_content(
-            model="gemini-3.1-pro-preview",
-            contents=[SYSTEM_PROMPT, img_rgb],
-            config=types.GenerateContentConfig(
-                http_options=types.HttpOptions(timeout=300000)
-            ),
-        )
-
-        if not response.text:
-            emit_progress("warn", f"[{idx}/{total}] {img_path.name} — Gemini returned empty response, skipping.")
-            failed += 1
-            continue
-
-        raw = response.text.strip()
-
-        # Strip markdown fences if present
-        raw = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.IGNORECASE)
-        raw = re.sub(r'\s*```\s*$', '', raw)
-        raw = raw.strip()
-
-        parsed = json.loads(raw)
-
-        # Wrap in the formatted_json structure that the rest of IRIS expects
-        output = {
-            "filename":      img_path.name,
-            "source_image":  stem,
-            "ocr":           raw,
-            "formatted_json": parsed,
-        }
-
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
-
-        # Also copy to species_dir root so pipeline.py finds it
-        root_out = species_dir / f"{stem}.json"
-        with open(root_out, "w", encoding="utf-8") as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
-
-        emit_progress("processing", f"[{idx}/{total}] {img_path.name} — done ✓")
-        succeeded += 1
-
-    except Exception as e:
-        err_str = str(e)
-        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-            msg = (f"Quota exceeded for {img_path.name} — "
-                   f"gemini-3.1-pro-preview requires billing enabled on your Google account. "
-                   f"Go to aistudio.google.com to enable billing.")
-        elif "401" in err_str or "UNAUTHENTICATED" in err_str:
-            msg = f"Invalid API key for {img_path.name} — check your Gemini API key in Settings."
-        elif "404" in err_str or "not found" in err_str.lower():
-            msg = f"Model not available for {img_path.name} — check your API key has access to gemini-3.1-pro-preview."
-        elif "500" in err_str or "INTERNAL" in err_str:
-            msg = f"Gemini server error for {img_path.name} — please try again in a moment."
-        elif "504" in err_str or "DEADLINE_EXCEEDED" in err_str:
-            msg = f"Timeout processing {img_path.name} — image may be too large. Try a smaller image."
-        elif "503" in err_str or "unavailable" in err_str.lower() or "network" in err_str.lower() or "connection" in err_str.lower():
-            msg = f"Could not reach Gemini for {img_path.name} — please check your internet connection and try again."
-        else:
-            msg = f"Failed {img_path.name}: {err_str[:120]}"
-        emit_progress("warn", msg)
-        failed += 1
-
-if succeeded == 0:
-    emit_progress("complete", f"No specimens could be transcribed ({failed} failed).")
-    emit("done", succeeded=0, failed=failed, cleanup=True)
-else:
-    emit_progress("complete",
-        f"Done — {succeeded}/{total} specimen(s) transcribed successfully"
-        + (f", {failed} failed" if failed else ""))
-    emit_done(succeeded=succeeded, failed=failed)
+# ── Count output JSONs ────────────────────────────────────────────────────────
+json_files = list(species_dir.glob("*.json"))
+emit_progress("complete", f"VoucherVision finished — {len(json_files)} JSON files generated")
+emit_done()
+'''

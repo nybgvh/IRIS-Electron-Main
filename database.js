@@ -71,6 +71,44 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_species_user     ON species(user_id);
   CREATE INDEX IF NOT EXISTS idx_specimens_species ON specimens(species_id);
   CREATE INDEX IF NOT EXISTS idx_pics_species      ON pics(species_id);
+
+  -- GBIF library: occurrences imported from the GBIF browser tab, scoped to the
+  -- user's current output-root folder (the "library"). One row per occurrence,
+  -- linked to a locally stored image at file_path.
+  CREATE TABLE IF NOT EXISTS gbif_sources (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    root_dir        TEXT NOT NULL,
+    gbif_id         TEXT NOT NULL,
+    file_path       TEXT,
+    occurrence_url  TEXT,
+    image_url       TEXT,
+    citation        TEXT,
+    scientific_name TEXT,
+    dataset_key     TEXT,
+    dataset_title   TEXT,
+    dataset_doi     TEXT,
+    publisher       TEXT,
+    catalog_number  TEXT,
+    country         TEXT,
+    latitude        REAL,
+    longitude       REAL,
+    raw_json        TEXT,
+    created_at      TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS gbif_bookmarks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    root_dir   TEXT NOT NULL,
+    url        TEXT NOT NULL,
+    label      TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_gbif_user_root_id     ON gbif_sources(user_id, root_dir, gbif_id);
+  CREATE INDEX        IF NOT EXISTS idx_gbif_user_root        ON gbif_sources(user_id, root_dir);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_gbif_bm_user_root_url ON gbif_bookmarks(user_id, root_dir, url);
 `;
 
 // ── Persist ───────────────────────────────────────────────────────────────────
@@ -276,6 +314,73 @@ function deleteSpecies(userId, name, rootDir) {
   run("DELETE FROM species WHERE user_id=? AND name=? AND root_dir=?", [userId, name, rootDir]);
 }
 
+// ── GBIF library ──────────────────────────────────────────────────────────────
+function createGbifSource(rec) {
+  run(`INSERT INTO gbif_sources (
+    user_id, root_dir, gbif_id, file_path, occurrence_url, image_url, citation,
+    scientific_name, dataset_key, dataset_title, dataset_doi, publisher,
+    catalog_number, country, latitude, longitude, raw_json
+  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [
+    rec.user_id, rec.root_dir, String(rec.gbif_id),
+    rec.file_path ?? null, rec.occurrence_url ?? null, rec.image_url ?? null,
+    rec.citation ?? null, rec.scientific_name ?? null, rec.dataset_key ?? null,
+    rec.dataset_title ?? null, rec.dataset_doi ?? null, rec.publisher ?? null,
+    rec.catalog_number ?? null, rec.country ?? null,
+    rec.latitude ?? null, rec.longitude ?? null, rec.raw_json ?? null,
+  ]);
+  return findGbifByGbifId(rec.user_id, rec.root_dir, rec.gbif_id);
+}
+
+function findGbifByGbifId(userId, rootDir, gbifId) {
+  return get(
+    "SELECT * FROM gbif_sources WHERE user_id=? AND root_dir=? AND gbif_id=?",
+    [userId, rootDir, String(gbifId)]
+  );
+}
+
+function listGbifSources(userId, rootDir) {
+  return all(
+    "SELECT * FROM gbif_sources WHERE user_id=? AND root_dir=? ORDER BY created_at DESC, id DESC",
+    [userId, rootDir]
+  );
+}
+
+function getGbifSource(userId, id) {
+  return get("SELECT * FROM gbif_sources WHERE user_id=? AND id=?", [userId, id]);
+}
+
+function removeGbifSource(userId, id) {
+  run("DELETE FROM gbif_sources WHERE user_id=? AND id=?", [userId, id]);
+}
+
+function createGbifBookmark(rec) {
+  run("INSERT INTO gbif_bookmarks (user_id, root_dir, url, label) VALUES (?,?,?,?)",
+    [rec.user_id, rec.root_dir, rec.url, rec.label ?? null]);
+  return findGbifBookmarkByUrl(rec.user_id, rec.root_dir, rec.url);
+}
+
+function findGbifBookmarkByUrl(userId, rootDir, url) {
+  return get(
+    "SELECT * FROM gbif_bookmarks WHERE user_id=? AND root_dir=? AND url=?",
+    [userId, rootDir, url]
+  );
+}
+
+function findGbifBookmarkById(userId, id) {
+  return get("SELECT * FROM gbif_bookmarks WHERE user_id=? AND id=?", [userId, id]);
+}
+
+function listGbifBookmarks(userId, rootDir) {
+  return all(
+    "SELECT * FROM gbif_bookmarks WHERE user_id=? AND root_dir=? ORDER BY created_at DESC, id DESC",
+    [userId, rootDir]
+  );
+}
+
+function removeGbifBookmark(userId, id) {
+  run("DELETE FROM gbif_bookmarks WHERE user_id=? AND id=?", [userId, id]);
+}
+
 module.exports = {
   init,
   createUser, loginUser, getUser,
@@ -284,4 +389,6 @@ module.exports = {
   upsertSpecimens, getSpecimens,
   upsertPics, getPicsMap,
   deleteSpecies,
+  createGbifSource, findGbifByGbifId, listGbifSources, getGbifSource, removeGbifSource,
+  createGbifBookmark, findGbifBookmarkByUrl, findGbifBookmarkById, listGbifBookmarks, removeGbifBookmark,
 };
