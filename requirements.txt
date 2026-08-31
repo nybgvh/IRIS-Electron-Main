@@ -1,5 +1,11 @@
-# Python dependencies for pipeline.py and voucher_pipeline.py
-# Install with: pip install -r requirements.txt (use pip3 on macOS/Linux if needed)
-
-google-generativeai>=0.8.0
-VoucherVision
+# NO PYTHON DEPENDENCIES REQUIRED.
+#
+# Both pipelines now run natively over HTTP from the Electron main process — no
+# Python subprocess:
+#   - Red List summaries  → gemini-client.js  (Gemini generateContent)
+#   - VoucherVision        → vouchervision-client.js (VoucherVisionGO /process)
+#
+# The old Python scripts (pipeline.py, voucher_pipeline.py) are disabled/commented
+# and no longer invoked. Former dependencies, kept for reference only:
+# google-generativeai>=0.8.0   # was used by pipeline.py
+# VoucherVision                # was used by voucher_pipeline.py
