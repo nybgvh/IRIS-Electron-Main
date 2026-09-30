@@ -320,6 +320,11 @@ body {
   -webkit-app-region: drag;
 }
 
+/* Mac: extra top padding so traffic lights don't overlap the logo */
+body.platform-mac #sidebar-header {
+  padding-top: 44px;
+}
+
 #logo-block {
   display: flex;
   align-items: center;

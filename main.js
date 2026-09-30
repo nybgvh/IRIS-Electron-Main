@@ -32,9 +32,17 @@ function createWindow() {
     width: 1280, height: 820, minWidth: 900, minHeight: 600,
     backgroundColor: "#0f1a0f",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    trafficLightPosition: process.platform === "darwin" ? { x: 14, y: 20 } : undefined,
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false },
   });
   mainWindow.loadFile("index.html");
+  if (process.platform === "darwin") {
+    mainWindow.webContents.on("did-finish-load", () => {
+      mainWindow.webContents.executeJavaScript(
+        'document.body.classList.add("platform-mac")'
+      );
+    });
+  }
 }
 
 app.whenReady().then(async () => {
