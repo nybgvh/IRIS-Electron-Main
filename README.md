@@ -43,17 +43,9 @@ npm start
 1. Launch the app and register an account
 2. Click the ⚙ gear icon → Settings and enter:
    - **Output root folder** — where species data will be stored (e.g. `C:\Users\you\Documents\IRIS\output`)
-   - **Gemini API key** — get one free at [aistudio.google.com](https://aistudio.google.com)
+   - **Gemini API key** — get one at [aistudio.google.com](https://aistudio.google.com)
 3. Click Save
 
-## Getting a Gemini API Key
-
-1. Go to [aistudio.google.com](https://aistudio.google.com)
-2. Sign in with a Google account
-3. Click **Get API key** → **Create API key**
-4. Copy the key and paste it into IRIS Settings
-
-## Usage
 
 ### Adding a new species
 1. Click **+ New species** in the sidebar
