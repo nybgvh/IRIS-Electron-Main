@@ -1,6 +1,6 @@
 # IRIS — Integrated Red List Inference from Specimens
 
-A desktop application for generating IUCN Red List assessment criteria (Taxonomy, Georgraphic Range, Habitat, Ecology, Use & Trade, Threats & Conservation) from herbarium specimen using VoucherVision.
+A desktop application for generating IUCN Red List assessment criteria (Taxonomy, Geographic Range, Habitat, Ecology, Use & Trade, Threats & Conservation) from herbarium specimen using VoucherVision.
 
 ## Overview
 
