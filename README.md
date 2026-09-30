@@ -56,9 +56,8 @@ npm start
 
 ### Browsing assessments
 - Click any species in the sidebar to view its assessment
-- Use the section nav pills to jump between sections
 - Click map markers to see specimen details
-- Click thumbnails to open the full image — scroll to zoom, drag to pan
+- Click thumbnails to open the full image
 
 ## Data Storage
 
