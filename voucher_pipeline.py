@@ -10,7 +10,12 @@ import sys
 import os
 import json
 import logging
+import warnings
+warnings.filterwarnings("ignore")
 logging.getLogger("google.genai").setLevel(logging.ERROR)
+logging.getLogger("google.ai.generativelanguage").setLevel(logging.ERROR)
+logging.getLogger("google.api_core").setLevel(logging.ERROR)
+logging.disable(logging.WARNING)
 import base64
 import re
 from pathlib import Path

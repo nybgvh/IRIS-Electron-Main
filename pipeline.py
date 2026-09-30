@@ -7,7 +7,12 @@ Usage: python pipeline.py <output_root> <gemini_api_key> [species_name]
 import sys
 import json
 import logging
+import warnings
+warnings.filterwarnings("ignore")
 logging.getLogger("google.genai").setLevel(logging.ERROR)
+logging.getLogger("google.ai.generativelanguage").setLevel(logging.ERROR)
+logging.getLogger("google.api_core").setLevel(logging.ERROR)
+logging.disable(logging.WARNING)
 import re
 from pathlib import Path
 from datetime import datetime
