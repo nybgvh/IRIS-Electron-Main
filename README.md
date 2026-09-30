@@ -1,13 +1,13 @@
 # IRIS — Integrated Red List Inference from Specimens
 
-A desktop application for generating IUCN Red List assessments from herbarium specimen images using Google Gemini AI.
+A desktop application for generating IUCN Red List assessments from herbarium specimen using VoucherVision.
 
 ## Overview
 
 IRIS streamlines the Red List assessment workflow:
 
 1. **Upload** herbarium specimen images for a species
-2. **Transcribe** label data automatically using Google Gemini Vision
+2. **Transcribe** label data automatically using VoucherVision
 3. **Summarise** specimen records into a structured IUCN Red List draft assessment
 4. **Browse** assessments by section with an interactive map of collection localities
 
@@ -67,3 +67,11 @@ npm start
 - Use the section nav pills to jump between sections
 - Click map markers to see specimen details
 - Click thumbnails to open the full image — scroll to zoom, drag to pan
+
+## Data Storage
+
+All data is stored locally on your machine:
+- **Database:** `%AppData%\iris-iucn\redlist.db` (Windows) or `~/Library/Application Support/iris-iucn/redlist.db` (Mac)
+- **Settings:** stored alongside the database in `settings.json`
+- **Species data:** in your configured output root folder
+
