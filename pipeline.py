@@ -198,7 +198,7 @@ def process_species(json_dir: Path) -> bool:
         emit_error(species, "All JSON files failed to parse")
         return False
 
-    emit_progress(species, "generating", f"Sending {len(records)} records to Gemini…")
+    emit_progress(species, "generating", f"Sending {len(records)} records to Gemini — this may take a few minutes…")
 
     prompt = PROMPT_TEMPLATE.format(records=json.dumps(records, indent=2), language=language)
 

@@ -162,7 +162,7 @@ Return this exact JSON structure:
 }"""
 
 # ── Process each image ────────────────────────────────────────────────────────
-emit_progress("processing", f"Transcribing {len(images)} image(s) with Gemini…")
+emit_progress("processing", f"Transcribing {len(images)} image(s) with Gemini — this may take a few minutes…")
 
 output_dir = species_dir / "vv_run" / "Transcription" / "Individual"
 output_dir.mkdir(parents=True, exist_ok=True)
