@@ -26,7 +26,7 @@ IRIS streamlines the Red List assessment workflow:
 
 - [Node.js LTS](https://nodejs.org/) (v18 or higher)
 - [Python 3.10 or 3.11](https://www.python.org/)
-- A [Gemini API key](https://aistudio.google.com/) (free from Google AI Studio)
+- A [Gemini API key](https://aistudio.google.com/) 
 
 ## Installation
 
