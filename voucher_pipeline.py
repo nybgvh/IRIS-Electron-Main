@@ -220,7 +220,20 @@ for img_path in images:
         succeeded += 1
 
     except Exception as e:
-        emit_progress("warn", f"Failed {img_path.name}: {e}")
+        err_str = str(e)
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+            msg = (f"Quota exceeded for {img_path.name} — "
+                   f"gemini-3.1-pro-preview requires billing enabled on your Google account. "
+                   f"Go to aistudio.google.com to enable billing.")
+        elif "401" in err_str or "UNAUTHENTICATED" in err_str:
+            msg = f"Invalid API key for {img_path.name} — check your Gemini API key in Settings."
+        elif "404" in err_str or "not found" in err_str.lower():
+            msg = f"Model not available for {img_path.name} — check your API key has access to gemini-3.1-pro-preview."
+        elif "504" in err_str or "DEADLINE_EXCEEDED" in err_str:
+            msg = f"Timeout processing {img_path.name} — image may be too large. Try a smaller image."
+        else:
+            msg = f"Failed {img_path.name}: {err_str[:120]}"
+        emit_progress("warn", msg)
         failed += 1
 
 total = succeeded + failed

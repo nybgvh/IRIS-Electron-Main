@@ -212,7 +212,15 @@ def process_species(json_dir: Path) -> bool:
         )
         response_text = response.text
     except Exception as e:
-        emit_error(species, f"Gemini API error: {e}")
+        err_str = str(e)
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+            emit_error(species, "Quota exceeded — gemini-3.1-pro-preview requires billing enabled. Go to aistudio.google.com to enable billing.")
+        elif "401" in err_str or "UNAUTHENTICATED" in err_str:
+            emit_error(species, "Invalid API key — check your Gemini API key in Settings.")
+        elif "504" in err_str or "DEADLINE_EXCEEDED" in err_str:
+            emit_error(species, "Request timed out — try again or reduce the number of specimens.")
+        else:
+            emit_error(species, f"Gemini API error: {err_str[:150]}")
         return False
 
     # Parse JSON response
