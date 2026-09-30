@@ -1,4 +1,4 @@
-const runAllBtn  = document.getElementById("run-all-btn");
+const runAllBtn  = { disabled: false, classList: { add: ()=>{}, remove: ()=>{} }, addEventListener: ()=>{} }; // removed
 const generateBtn = document.getElementById("generate-btn");
 
 // ── Theme ─────────────────────────────────────────────────
@@ -786,7 +786,7 @@ function formatSectionContent(raw) {
 function injectThumbnails(html) {
   // Match "source_image:" followed by a comma-separated list of hex-like stems
   return html.replace(
-    /source_image:\s*([\w,\s]+?)(?=[).;,<]|$)/gi,
+    /source_image:\s*([\w\-.,\s]+?)(?=[);,<]|$)/gi,
     (match, stemList) => {
       const stems = stemList.split(",").map((s) => s.trim()).filter(Boolean);
       const thumbs = stems.map((stem) => {
@@ -1015,6 +1015,7 @@ const pipelineLog      = document.getElementById("pipeline-log");
 const pipelineBar      = document.getElementById("pipeline-progress-bar");
 const pipelineStatus   = document.getElementById("pipeline-status-text");
 const pipelineCancelBtn= document.getElementById("pipeline-cancel-btn");
+const pipelineDoneBtn  = document.getElementById("pipeline-done-btn");
 
 let pipelineTotal = 0;
 let pipelineDone  = 0;
@@ -1026,6 +1027,7 @@ function openPipelinePanel(title) {
   pipelineStatus.textContent = "";
   pipelineClose.disabled = true;
   pipelineCancelBtn.disabled = false;
+  pipelineDoneBtn.classList.add("hidden");
   pipelineTotal = 0;
   pipelineDone  = 0;
   pipelinePanel.classList.remove("hidden");
@@ -1033,17 +1035,24 @@ function openPipelinePanel(title) {
 
 function closePipelinePanel() {
   pipelinePanel.classList.add("hidden");
+  pipelineDoneBtn.classList.add("hidden");
   window.api.offPipelineEvent();
-  // Reload the active species if one is open
-  if (state.active) {
-    const sp = state.species.find(s => s.name === state.active);
-    if (sp) selectSpecies(sp);
+  if (state.active && state.rootDir) {
+    window.api.refreshSpecies(state.rootDir, state.active).then(result => {
+      const sp = state.species.find(s => s.name === state.active);
+      if (sp) {
+        sp.hasSummary    = result && !result.error ? result.hasSummary    : true;
+        sp.specimenCount = result && !result.error ? result.specimenCount : sp.specimenCount;
+        renderSpeciesList();
+        updateStats();
+        selectSpecies(sp);
+      }
+    });
   }
-  // Refresh species list to update green dots
-  if (state.rootDir) reloadSpeciesList();
 }
 
 pipelineClose.addEventListener("click", closePipelinePanel);
+pipelineDoneBtn.addEventListener("click", closePipelinePanel);
 document.getElementById("pipeline-backdrop").addEventListener("click", () => {
   if (!pipelineClose.disabled) closePipelinePanel();
 });
@@ -1132,6 +1141,7 @@ function setupPipelineEvents() {
         pipelineTitle.textContent = "Pipeline complete";
         pipelineClose.disabled = false;
         pipelineCancelBtn.disabled = true;
+        pipelineDoneBtn.classList.remove("hidden");
         runAllBtn.disabled = false;
         generateBtn.disabled = false;
         break;

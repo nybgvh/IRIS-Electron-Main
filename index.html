@@ -100,12 +100,7 @@
               </svg>
               Reload
             </button>
-            <button id="run-all-btn" class="action-btn run-btn" title="Summarise all species" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              Run all
-            </button>
+
             <button id="settings-btn" class="action-btn" title="Settings">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"/>
@@ -355,7 +350,10 @@
         <div id="pipeline-log"></div>
         <div class="modal-footer">
           <span id="pipeline-status-text"></span>
-          <button id="pipeline-cancel-btn" class="danger-btn">Cancel</button>
+          <div style="display:flex;gap:8px">
+            <button id="pipeline-done-btn" class="cta-btn hidden">Done — view summary</button>
+            <button id="pipeline-cancel-btn" class="danger-btn">Cancel</button>
+          </div>
         </div>
       </div>
     </div>
