@@ -786,7 +786,7 @@ function formatSectionContent(raw) {
 function injectThumbnails(html) {
   // Match "source_image:" followed by a comma-separated list of hex-like stems
   return html.replace(
-    /source_image:\s*([\w\-.,\s]+?)(?=[);,<]|$)/gi,
+    /source(?:_image)?:\s*([\w\-.,\s]+?)(?=[);,<]|$)/gi,
     (match, stemList) => {
       const stems = stemList.split(",").map((s) => s.trim()).filter(Boolean);
       const thumbs = stems.map((stem) => {

@@ -229,6 +229,8 @@ for img_path in images:
             msg = f"Invalid API key for {img_path.name} — check your Gemini API key in Settings."
         elif "404" in err_str or "not found" in err_str.lower():
             msg = f"Model not available for {img_path.name} — check your API key has access to gemini-3.1-pro-preview."
+        elif "500" in err_str or "INTERNAL" in err_str:
+            msg = f"Gemini server error for {img_path.name} — please try again in a moment."
         elif "504" in err_str or "DEADLINE_EXCEEDED" in err_str:
             msg = f"Timeout processing {img_path.name} — image may be too large. Try a smaller image."
         else:
