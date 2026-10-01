@@ -71,8 +71,15 @@ Use only information present in the records. Do not invent information.
 
 CRITICAL CITATION RULE:
 Every specimen filename must be cited individually, each preceded by its own "source_image:" prefix.
+This prefix MUST always be written as exactly "source_image:" regardless of the output language.
+NEVER translate, abbreviate, or change this prefix. It must appear in English in ALL outputs.
 CORRECT:  source_image: abc123, source_image: def456
 WRONG:    source_image: abc123, def456
+WRONG:    source: abc123
+WRONG:    fuente: abc123
+WRONG:    fonte: abc123
+WRONG:    quelle: abc123
+Only "source_image:" is acceptable — never anything else.
 
 FORMATTING RULES (applied within each section value):
 1. Sub-criteria use a bullet line with a bold label, formatted exactly as:
