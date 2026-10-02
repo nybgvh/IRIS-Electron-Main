@@ -349,7 +349,7 @@ function renderSpeciesList() {
     countLine.className = "species-count";
     countLine.textContent = sp.specimenCount
       ? `${sp.specimenCount} specimen${sp.specimenCount !== 1 ? "s" : ""}`
-      : "no specimens indexed";
+      : "no specimens — upload images first";
 
     nameBlock.appendChild(nameLine);
     nameBlock.appendChild(countLine);
@@ -1167,6 +1167,18 @@ async function runPipeline(speciesName, language) {
     return;
   }
 
+  // Check species has specimens before running
+  if (speciesName) {
+    const sp = state.species.find(s => s.name === speciesName);
+    if (sp && sp.specimenCount === 0) {
+      openPipelinePanel("Error");
+      appendLog(null, "error", `No specimen records found for ${sp.displayName}. Please process images first.`);
+      pipelineClose.disabled = false;
+      pipelineCancelBtn.disabled = true;
+      return;
+    }
+  }
+
   const title = speciesName
     ? `Summarizing: ${speciesName.replace(/_/g, " ")} (${language || "English"})`
     : `Summarizing all species (${language || "English"})…`;
@@ -1294,12 +1306,37 @@ async function runVoucherPipeline(rootDir, speciesName) {
         break;
       case "done":
         voucherBar.style.width    = "100%";
-        voucherTitle.textContent  = "VoucherVision complete ✓";
-        voucherStatus.textContent = "Ready to summarize";
         voucherClose.disabled     = false;
         voucherCancelBtn.disabled = true;
-        voucherThenSumBtn.classList.remove("hidden");
-        window.api.refreshSpecies(rootDir, speciesName);
+
+        if (msg.cleanup) {
+          // Nothing transcribed — delete the species from DB and disk
+          voucherTitle.textContent  = "Transcription failed";
+          voucherStatus.textContent = "No specimens were transcribed — removing species.";
+          voucherThenSumBtn.classList.add("hidden");
+          window.api.deleteSpecies(rootDir, speciesName).then(() => {
+            state.species  = state.species.filter(s => s.name !== speciesName);
+            state.filtered = state.filtered.filter(s => s.name !== speciesName);
+            if (state.active === speciesName) {
+              state.active = null;
+              showWelcome();
+            }
+            renderSpeciesList();
+            updateStats();
+          });
+        } else {
+          voucherTitle.textContent  = "Processing complete ✓";
+          voucherStatus.textContent = "Ready to summarize";
+          voucherThenSumBtn.classList.remove("hidden");
+          window.api.refreshSpecies(rootDir, speciesName).then(result => {
+            const sp = state.species.find(s => s.name === speciesName);
+            if (sp && result && !result.error) {
+              sp.specimenCount = result.specimenCount;
+              renderSpeciesList();
+              updateStats();
+            }
+          });
+        }
         break;
       case "closed":
         if (msg.code !== 0 && voucherClose.disabled) {
@@ -1356,7 +1393,14 @@ function closeNewSpeciesModal() {
   newSpeciesModal.classList.add("hidden");
 }
 
-newSpeciesBtn.addEventListener("click", openNewSpeciesModal);
+newSpeciesBtn.addEventListener("click", () => {
+  if (!state.rootDir) {
+    alert("Please set an output folder in Settings before creating a species.");
+    document.getElementById("settings-btn").click();
+    return;
+  }
+  openNewSpeciesModal();
+});
 newSpeciesClose.addEventListener("click", closeNewSpeciesModal);
 document.getElementById("new-species-backdrop").addEventListener("click", closeNewSpeciesModal);
 

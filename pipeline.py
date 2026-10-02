@@ -228,6 +228,8 @@ def process_species(json_dir: Path) -> bool:
             emit_error(species, "Gemini server error — please try again in a moment.")
         elif "504" in err_str or "DEADLINE_EXCEEDED" in err_str:
             emit_error(species, "Request timed out — try again or reduce the number of specimens.")
+        elif "503" in err_str or "unavailable" in err_str.lower() or "network" in err_str.lower() or "connection" in err_str.lower():
+            emit_error(species, "Could not reach Gemini — please check your internet connection and try again.")
         else:
             emit_error(species, f"Gemini API error: {err_str[:150]}")
         return False

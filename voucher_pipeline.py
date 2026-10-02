@@ -190,8 +190,13 @@ for idx, img_path in enumerate(images, 1):
 
     try:
         # Load image
-        with PILImage.open(img_path) as im:
-            img_rgb = im.convert("RGB")
+        try:
+            with PILImage.open(img_path) as im:
+                img_rgb = im.convert("RGB")
+        except Exception as img_err:
+            emit_progress("warn", f"[{idx}/{total}] {img_path.name} — could not open image ({img_err}). File may be corrupted or in an unsupported format.")
+            failed += 1
+            continue
 
         # Send to Gemini
         response = client.models.generate_content(
@@ -249,13 +254,18 @@ for idx, img_path in enumerate(images, 1):
             msg = f"Gemini server error for {img_path.name} — please try again in a moment."
         elif "504" in err_str or "DEADLINE_EXCEEDED" in err_str:
             msg = f"Timeout processing {img_path.name} — image may be too large. Try a smaller image."
+        elif "503" in err_str or "unavailable" in err_str.lower() or "network" in err_str.lower() or "connection" in err_str.lower():
+            msg = f"Could not reach Gemini for {img_path.name} — please check your internet connection and try again."
         else:
             msg = f"Failed {img_path.name}: {err_str[:120]}"
         emit_progress("warn", msg)
         failed += 1
 
-emit_progress("complete",
-    f"Done — {succeeded}/{total} specimen(s) transcribed successfully"
-    + (f", {failed} failed" if failed else ""))
-
-emit_done(succeeded=succeeded, failed=failed)
+if succeeded == 0:
+    emit_progress("complete", f"No specimens could be transcribed ({failed} failed).")
+    emit("done", succeeded=0, failed=failed, cleanup=True)
+else:
+    emit_progress("complete",
+        f"Done — {succeeded}/{total} specimen(s) transcribed successfully"
+        + (f", {failed} failed" if failed else ""))
+    emit_done(succeeded=succeeded, failed=failed)
