@@ -78,7 +78,7 @@ ipcMain.handle("auth-logout", () => {
 ipcMain.handle("auth-current", () => currentUser);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const IMG_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"];
+const IMG_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".jfif", ".bmp", ".heic", ".heif", ".jp2"];
 
 function scanPics(rootDir, speciesName) {
   const picsDir = path.join(rootDir, speciesName, "pics");
@@ -347,7 +347,7 @@ ipcMain.handle("pick-images", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Select herbarium specimen images",
     properties: ["openFile", "multiSelections"],
-    filters: [{ name: "Images", extensions: ["jpg","jpeg","png","webp","tif","tiff"] }],
+    filters: [{ name: "Images", extensions: ["jpg","jpeg","png","webp","tif","tiff","jfif","bmp","heic","heif","jp2"] }],
   });
   return result.canceled ? [] : result.filePaths;
 });
@@ -370,13 +370,15 @@ ipcMain.handle("load-output-root", async () => {
       const hasSummary    = summaryExists(rootDir, row.name);
       const specimenCount = fs.readdirSync(dirPath)
         .filter(f => f.endsWith(".json") && !f.startsWith("red_list_summary")).length;
-      db.upsertSpecies({ userId: user.id, name: row.name, displayName: row.display_name, rootDir, specimenCount, hasSummary });
+      const updatedRow = db.upsertSpecies({ userId: user.id, name: row.name, displayName: row.display_name, rootDir, specimenCount, hasSummary });
       if (hasSummary && !row.summary_text) {
         try {
           const data = readSummaryFile(rootDir, row.name);
           if (data) db.updateSummary(user.id, row.name, rootDir, data);
         } catch (_) {}
       }
+      db.upsertSpecimens(updatedRow.id, scanSpecimens(rootDir, row.name));
+      db.upsertPics(updatedRow.id, scanPics(rootDir, row.name));
     }
 
     const species = db.getAllSpecies(user.id, rootDir).map(r => ({
@@ -415,6 +417,44 @@ ipcMain.handle("create-species", async (_e, speciesName, imagePaths) => {
   } catch (err) { return { error: err.message }; }
 });
 
+
+// ── Python spawn environment ──────────────────────────────────────────────────
+const os = require("os");
+
+function getPythonEnv() {
+  const env = { ...process.env };
+  if (process.platform === "darwin") {
+    // Do NOT set PYTHONPATH - let Python use its own system site-packages
+    // Just ensure Python bin dirs are on PATH for findPython()
+    env.PATH = [
+      "/Library/Frameworks/Python.framework/Versions/3.11/bin",
+      "/Library/Frameworks/Python.framework/Versions/3.10/bin",
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+    ].join(":");
+    delete env.PYTHONPATH;
+    env.PYTHONNOUSERSITE = "0";
+  }
+  return env;
+}
+
+// ── Find best Python on Mac ───────────────────────────────────────────────────
+function findPython() {
+  if (process.platform === "win32") return "python";
+  // Use the Xcode CommandLineTools Python which is arm64 and has
+  // packages installed correctly via /usr/bin/python3
+  const candidates = [
+    "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "/usr/bin/python3",
+    "python3",
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return "python3";
+}
 // ── IPC: run-pipeline ─────────────────────────────────────────────────────────
 ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
   const settings = loadSettings();
@@ -426,12 +466,12 @@ ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
   if (speciesName) args.push(speciesName);
   args.push(language || "English");
 
-  const pythonCmd = process.platform === "win32" ? "python" : "python3";
+  const pythonCmd = findPython();
   const user      = currentUser;
 
   return new Promise((resolve) => {
     let proc;
-    try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"] }); }
+    try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"], env: getPythonEnv() }); }
     catch (err) { resolve({ error: `Could not start Python: ${err.message}` }); return; }
 
     activeProcess = proc;
@@ -482,12 +522,12 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
 
   const speciesDir = path.join(rootDir, speciesName);
   const scriptPath = pyScript("voucher_pipeline.py");
-  const pythonCmd  = process.platform === "win32" ? "python" : "python3";
+  const pythonCmd  = findPython();
   const args       = [scriptPath, speciesDir, settings.geminiApiKey];
 
   return new Promise((resolve) => {
     let proc;
-    try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"] }); }
+    try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"], env: getPythonEnv() }); }
     catch (err) { resolve({ error: `Could not start Python: ${err.message}` }); return; }
 
     activeProcess = proc;
