@@ -60,28 +60,21 @@ if not images:
 try:
     from google import genai
     from google.genai import types
-except ImportError as e:
-    import site
-    debug_info = (
-        f"Python: {sys.executable} | "
-        f"Version: {sys.version.split()[0]} | "
-        f"Error: {e} | "
-        f"sys.path: {sys.path} | "
-        f"user site: {site.getusersitepackages()}"
-    )
-    emit("fatal", message=f"google-genai not installed. Debug: {debug_info}")
+except ImportError:
+    emit("fatal", message="google-genai not installed. Run: pip install google-genai")
     sys.exit(1)
 
 try:
     from PIL import Image as PILImage
+except ImportError:
+    emit("fatal", message="Pillow not installed. Run: pip install Pillow")
+    sys.exit(1)
+
 try:
     from pillow_heif import register_heif_opener
     register_heif_opener()
 except ImportError:
     pass  # heic/heif won't be supported but won't crash
-except ImportError:
-    emit("fatal", message="Pillow not installed. Run: pip install Pillow")
-    sys.exit(1)
 
 # ── Convert and resize images ─────────────────────────────────────────────────
 # Raise Pillow's decompression bomb limit for large herbarium scans
