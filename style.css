@@ -985,6 +985,7 @@ body.platform-mac #sidebar-header {
 
 /* ── New species button ──────────────────────────────────── */
 #new-species-btn {
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1048,6 +1049,7 @@ body.platform-mac #sidebar-header {
 #sidebar-actions {
   display: flex;
   gap: 6px;
+  -webkit-app-region: no-drag;
 }
 
 .action-btn {
