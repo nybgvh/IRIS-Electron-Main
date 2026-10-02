@@ -479,7 +479,13 @@ ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
   return new Promise((resolve) => {
     let proc;
     try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"], env: getPythonEnv() }); }
-    catch (err) { resolve({ error: `Could not start Python: ${err.message}` }); return; }
+    catch (err) {
+        const msg = err.code === 'ENOENT'
+          ? 'Python not found. Please install Python 3.10 or 3.11 from python.org and ensure it is added to PATH.'
+          : `Could not start Python: ${err.message}`;
+        resolve({ error: msg });
+        return;
+      }
 
     activeProcess = proc;
 
@@ -499,7 +505,12 @@ ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
     });
 
     proc.stderr.on("data", chunk => {
-      mainWindow.webContents.send("pipeline-event", { event: "stderr", message: chunk.toString() });
+      const pipelineStderr = chunk.toString();
+        if (pipelineStderr.includes("Microsoft Store") || pipelineStderr.includes("was not found")) {
+          mainWindow.webContents.send("pipeline-event", { event: "error", message: "Python not found. Please install Python 3.10 or 3.11 from python.org and make sure to check \"Add Python to PATH\" during installation." });
+        } else {
+          mainWindow.webContents.send("pipeline-event", { event: "stderr", message: pipelineStderr });
+        }
     });
 
     proc.on("close", code => {
@@ -535,7 +546,13 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
   return new Promise((resolve) => {
     let proc;
     try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"], env: getPythonEnv() }); }
-    catch (err) { resolve({ error: `Could not start Python: ${err.message}` }); return; }
+    catch (err) {
+        const msg = err.code === 'ENOENT'
+          ? 'Python not found. Please install Python 3.10 or 3.11 from python.org and ensure it is added to PATH.'
+          : `Could not start Python: ${err.message}`;
+        resolve({ error: msg });
+        return;
+      }
 
     activeProcess = proc;
 
@@ -551,7 +568,12 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
     });
 
     proc.stderr.on("data", chunk => {
-      mainWindow.webContents.send("voucher-event", { event: "log", message: chunk.toString() });
+      const stderrMsg = chunk.toString();
+        if (stderrMsg.includes("Microsoft Store") || stderrMsg.includes("was not found")) {
+          mainWindow.webContents.send("voucher-event", { event: "error", message: "Python not found. Please install Python 3.10 or 3.11 from python.org and make sure to check \"Add Python to PATH\" during installation." });
+        } else {
+          mainWindow.webContents.send("voucher-event", { event: "log", message: stderrMsg });
+        }
     });
 
     proc.on("close", code => {
