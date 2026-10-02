@@ -399,7 +399,14 @@ ipcMain.handle("create-species", async (_e, speciesName, imagePaths) => {
 
     const folderName = speciesName.trim().replace(/\s+/g, "_");
     const speciesDir = path.join(outputRoot, folderName);
-    const picsDir    = path.join(speciesDir, "pics");
+
+    // Check for duplicate — folder exists on disk or already in DB
+    const existingRow = db.getSpeciesByName(user.id, folderName, outputRoot);
+    if (existingRow || fs.existsSync(speciesDir)) {
+      return { error: `"${speciesName.trim()}" already exists. Please delete it first before creating a new entry with the same name.` };
+    }
+
+    const picsDir = path.join(speciesDir, "pics");
     fs.mkdirSync(picsDir, { recursive: true });
 
     for (const src of imagePaths) {

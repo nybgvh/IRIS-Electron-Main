@@ -72,6 +72,7 @@ Use only information present in the records. Do not invent information.
 CRITICAL CITATION RULE:
 Every specimen filename must be cited individually, each preceded by its own "source_image:" prefix.
 This prefix MUST always be written as exactly "source_image:" regardless of the output language.
+The filename cited must be the exact value of the "source_image" field from the record — do NOT add any file extension such as .json, .jpg, .png etc.
 NEVER translate, abbreviate, or change this prefix. It must appear in English in ALL outputs.
 CORRECT:  source_image: abc123, source_image: def456
 WRONG:    source_image: abc123, def456
@@ -183,7 +184,6 @@ def process_species(json_dir: Path) -> bool:
         # {formatted_json: {...}, ocr: "..."} wrapper — support both shapes.
         fmt = data.get("formatted_json") or data
         records.append({
-            "filename":                 json_file.name,
             "source_image":             json_file.stem,
             "scientificName":           fmt.get("scientificName"),
             "country":                  fmt.get("country"),

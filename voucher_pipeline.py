@@ -176,11 +176,15 @@ output_dir.mkdir(parents=True, exist_ok=True)
 succeeded = 0
 failed    = 0
 
-for img_path in images:
+total = len(images)
+for idx, img_path in enumerate(images, 1):
     stem = img_path.stem
     out_path = output_dir / f"{stem}.json"
 
+    emit_progress("processing", f"[{idx}/{total}] {img_path.name}")
+
     if out_path.exists():
+        emit_progress("processing", f"[{idx}/{total}] {img_path.name} — already transcribed, skipping.")
         succeeded += 1
         continue
 
@@ -197,6 +201,11 @@ for img_path in images:
                 http_options=types.HttpOptions(timeout=300000)
             ),
         )
+
+        if not response.text:
+            emit_progress("warn", f"[{idx}/{total}] {img_path.name} — Gemini returned empty response, skipping.")
+            failed += 1
+            continue
 
         raw = response.text.strip()
 
@@ -223,6 +232,7 @@ for img_path in images:
         with open(root_out, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
+        emit_progress("processing", f"[{idx}/{total}] {img_path.name} — done ✓")
         succeeded += 1
 
     except Exception as e:
@@ -244,7 +254,6 @@ for img_path in images:
         emit_progress("warn", msg)
         failed += 1
 
-total = succeeded + failed
 emit_progress("complete",
     f"Done — {succeeded}/{total} specimen(s) transcribed successfully"
     + (f", {failed} failed" if failed else ""))

@@ -786,21 +786,21 @@ function formatSectionContent(raw) {
 function injectThumbnails(html) {
   // Match "source_image:" followed by a comma-separated list of hex-like stems
   return html.replace(
-    /source_image:\s*([\w\-.,\s]+?)(?=[);,<]|$)/gi,
+    /(?:source(?:_image)?|fuente|fonte|quelle|источник|来源|bron|source_img):\s*([\w\-.,\s]+?)(?=[);,<]|$)/gi,
     (match, stemList) => {
       const stems = stemList.split(",").map((s) => s.trim()).filter(Boolean);
       const thumbs = stems.map((stem) => {
-        const filePath = state.picsMap[stem];
+        // Strip common extensions that Gemini may include in citations
+        const cleanStem = stem.replace(/\.(json|jpg|jpeg|png|tif|tiff|webp|jfif|bmp|heic|heif|jp2)$/i, "");
+        const filePath = state.picsMap[cleanStem] || state.picsMap[stem];
         if (!filePath) {
-          // No image found — just render the stem as a dim code span
-          return `<span class="img-stem missing" title="Image not found: ${stem}">${stem}</span>`;
+          return `<span class="img-stem missing" title="Image not found: ${cleanStem}">${cleanStem}</span>`;
         }
-        // Use file:// URI; encode backslashes on Windows
         const uri = "file://" + filePath.replace(/\\/g, "/");
         return `<span class="thumb-wrap">
-          <img class="source-thumb" src="${uri}" alt="${stem}" title="${stem}"
+          <img class="source-thumb" src="${uri}" alt="${cleanStem}" title="${cleanStem}"
                loading="lazy" onerror="this.parentElement.classList.add('img-error')"/>
-          <span class="img-stem">${stem.slice(0, 8)}…</span>
+          <span class="img-stem">${cleanStem.slice(0, 8)}…</span>
         </span>`;
       });
 
@@ -1060,8 +1060,10 @@ document.getElementById("pipeline-backdrop").addEventListener("click", () => {
 pipelineCancelBtn.addEventListener("click", async () => {
   await window.api.cancelPipeline();
   appendLog(null, "cancelled", "Pipeline cancelled by user.");
-  pipelineClose.disabled = false;
+  pipelineClose.disabled    = false;
   pipelineCancelBtn.disabled = true;
+  generateBtn.disabled      = false;
+  runAllBtn.disabled        = false;
   pipelineStatus.textContent = "Cancelled.";
 });
 
@@ -1166,8 +1168,8 @@ async function runPipeline(speciesName, language) {
   }
 
   const title = speciesName
-    ? `Summarising: ${speciesName.replace(/_/g, " ")} (${language || "English"})`
-    : `Summarising all species (${language || "English"})…`;
+    ? `Summarizing: ${speciesName.replace(/_/g, " ")} (${language || "English"})`
+    : `Summarizing all species (${language || "English"})…`;
   openPipelinePanel(title);
   runAllBtn.disabled   = true;
   generateBtn.disabled = true;
@@ -1189,7 +1191,7 @@ runAllBtn.addEventListener("click", () => {
   openLangPicker(null);
 });
 
-// Per-species summarise button — shows language picker
+// Per-species summarize button — shows language picker
 generateBtn.addEventListener("click", () => {
   if (!state.rootDir || !state.active) return;
   openLangPicker(state.active);
@@ -1205,7 +1207,7 @@ const voucherLog         = document.getElementById("voucher-log");
 const voucherBar         = document.getElementById("voucher-progress-bar");
 const voucherStatus      = document.getElementById("voucher-status-text");
 const voucherCancelBtn   = document.getElementById("voucher-cancel-btn");
-const voucherThenSumBtn  = document.getElementById("voucher-then-summarise-btn");
+const voucherThenSumBtn  = document.getElementById("voucher-then-summarize-btn");
 
 function openVoucherPanel(title) {
   voucherTitle.textContent = title;
@@ -1293,7 +1295,7 @@ async function runVoucherPipeline(rootDir, speciesName) {
       case "done":
         voucherBar.style.width    = "100%";
         voucherTitle.textContent  = "VoucherVision complete ✓";
-        voucherStatus.textContent = "Ready to summarise";
+        voucherStatus.textContent = "Ready to summarize";
         voucherClose.disabled     = false;
         voucherCancelBtn.disabled = true;
         voucherThenSumBtn.classList.remove("hidden");
