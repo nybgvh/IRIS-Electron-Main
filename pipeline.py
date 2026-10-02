@@ -262,6 +262,39 @@ def process_species(json_dir: Path) -> bool:
         emit_error(species, f"Could not write JSON output: {e}")
         return False
 
+    # Write plain text summary for easy reading outside the app
+    SECTION_TITLES = {
+        "taxonomy":         "1. Taxonomy",
+        "geographic_range": "2. Geographic Range",
+        "habitat":          "3. Habitat",
+        "ecology":          "4. Ecology",
+        "use_and_trade":    "5. Use and Trade",
+        "threats":          "6. Threats and Conservation Actions",
+    }
+    try:
+        txt_out = json_dir / "red_list_summary_rd.txt"
+        with open(txt_out, "w", encoding="utf-8") as f:
+            display_name = species.replace("_", " ")
+            f.write(f"IRIS — Integrated Red List Inference from Specimens\n")
+            f.write(f"{'=' * 60}\n")
+            f.write(f"Species:   {display_name}\n")
+            f.write(f"Language:  {output.get('language', 'English')}\n")
+            f.write(f"Model:     {output.get('model', '')}\n")
+            f.write(f"Generated: {output.get('generated_at', '')}\n")
+            f.write(f"{'=' * 60}\n\n")
+            for key, title in SECTION_TITLES.items():
+                text = sections.get(key, "No information available from specimen records.")
+                # Strip markdown formatting for plain text
+                import re as _re
+                text = _re.sub(r'\*\*(.+?)\*\*', r'\1', text)   # bold
+                text = _re.sub(r'\*([^*]+?)\*',   r'\1', text)   # italic
+                text = _re.sub(r'^\*\s+', '  • ', text, flags=_re.MULTILINE)  # bullets
+                f.write(f"{title}\n")
+                f.write(f"{'-' * len(title)}\n")
+                f.write(f"{text}\n\n")
+    except Exception:
+        pass  # non-fatal — JSON is the primary output
+
     emit_done(species)
     return True
 

@@ -208,6 +208,21 @@
 
 #theme-toggle-btn:hover { color: var(--accent-text); border-color: var(--accent-dim); }
 
+#settings-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all var(--transition);
+  -webkit-app-region: no-drag;
+}
+
+#settings-btn:hover { color: var(--accent-text); border-color: var(--accent-dim); }
+
 /* ── Tokens ─────────────────────────────────────────────── */
 :root {
   --bg-deep:     #0c1a0c;

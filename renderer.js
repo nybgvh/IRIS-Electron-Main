@@ -217,7 +217,7 @@ if (els.welcomeOpenBtn) {
 }
 
 // ── Folder management ────────────────────────────────────
-const reloadBtn     = document.getElementById("reload-btn");
+const reloadBtn     = { disabled: false, addEventListener: ()=>{} }; // removed
 const langModal      = document.getElementById("lang-modal");
 const langBackdrop   = document.getElementById("lang-backdrop");
 const langClose      = document.getElementById("lang-close");
