@@ -7,7 +7,7 @@ A desktop application for generating IUCN Red List assessment criteria (Taxonomy
 IRIS streamlines the Red List assessment workflow:
 
 1. **Upload** herbarium specimen images for a species
-2. **Transcribe** label data automatically using VoucherVision
+2. **Transcribe** label data automatically using VoucherVision (see https://github.com/Gene-Weaver/VoucherVision)
 3. **Summarise** specimen records into a structured IUCN Red List draft assessment
 4. **Browse** assessments by section with an interactive map of collection localities
 
