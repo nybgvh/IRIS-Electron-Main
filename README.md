@@ -20,7 +20,6 @@ IRIS streamlines the Red List assessment workflow:
 - Interactive specimen map with collection date colour coding and GPS confidence indicators
 - Source image thumbnails with zoomable lightbox viewer
 - SQLite database for fast local storage
-- Species management — create, browse, delete
 
 ## Requirements
 
