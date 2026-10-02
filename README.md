@@ -1,4 +1,4 @@
-# IRIS — Integrated Red List Inference from Specimens
+# IRIS  Integrated Red List Inference from Specimens
 
 A desktop application for generating IUCN Red List assessment criteria (Taxonomy, Geographic Range, Habitat, Ecology, Use & Trade, Threats & Conservation) from herbarium specimen using VoucherVision.
 
@@ -42,16 +42,16 @@ npm start
 
 1. Launch the app and register an account
 2. Click the ⚙ gear icon → Settings and enter:
-   - **Output root folder** — where species data will be stored (e.g. `C:\Users\you\Documents\IRIS\output`)
-   - **Gemini API key** — get one at [aistudio.google.com](https://aistudio.google.com)
+   - **Output root folder**  where species data will be stored (e.g. `C:\Users\you\Documents\IRIS\output`)
+   - **Gemini API key**  get one at [aistudio.google.com](https://aistudio.google.com)
 3. Click Save
 
 
 ### Adding a new species
 1. Click **+ New species** in the sidebar
 2. Enter the species name and select herbarium images
-3. Click **Create & process** — Gemini will transcribe the labels automatically
-4. When complete, click **Summarise now** and select a language
+3. Click **Create & process**
+4. When complete, click **Summarize now** and select a language
 5. The draft assessment appears with an interactive map
 
 ### Browsing assessments
