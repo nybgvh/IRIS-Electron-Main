@@ -24,8 +24,6 @@
       "index.html",
       "style.css",
       "database.js",
-      "pipeline.py",
-      "voucher_pipeline.py",
       "node_modules/**/*"
     ],
     "win": {
@@ -57,10 +55,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "IRIS"
-    },
-    "asarUnpack": [
-      "*.py"
-    ]
+    }
   },
   "devDependencies": {
     "electron": "^42.5.0",
