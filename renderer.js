@@ -787,6 +787,9 @@ function formatSectionContent(raw) {
 //   source_image: abc123, def456
 //   (source_image: abc123, def456)
 //   source_image: abc123
+// Same photo icon as the "Add Images to Project" button.
+const SOURCE_ICON = `<svg class="source-ref-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+
 function injectThumbnails(html) {
   // Match "source_image:" followed by a comma-separated list of hex-like stems
   return html.replace(
@@ -801,14 +804,13 @@ function injectThumbnails(html) {
           return `<span class="img-stem missing" title="Image not found: ${cleanStem}">${cleanStem}</span>`;
         }
         const uri = "file://" + filePath.replace(/\\/g, "/");
-        return `<span class="thumb-wrap">
-          <img class="source-thumb" src="${uri}" alt="${cleanStem}" title="${cleanStem}"
-               loading="lazy" onerror="this.parentElement.classList.add('img-error')"/>
-          <span class="img-stem">${cleanStem.slice(0, 8)}…</span>
-        </span>`;
+        // Inline citation: photo icon + file name. Hover shows a thumbnail
+        // (#source-preview); click opens the lightbox.
+        return `<span class="source-ref" role="button" tabindex="0" data-src="${uri}" data-name="${cleanStem}">` +
+          `${SOURCE_ICON}<span class="source-ref-name">${cleanStem}</span></span>`;
       });
 
-      return `<span class="source-image-group"><span class="source-label">source:</span>${thumbs.join("")}</span>`;
+      return thumbs.join(", ");
     }
   );
 }
@@ -960,12 +962,71 @@ lbCaption.after(lbHint);
 lbBackdrop.addEventListener("click", closeLightbox);
 lbClose.addEventListener("click", closeLightbox);
 
-// Event delegation — catches clicks on dynamically injected thumbnails
-els.summaryBody.addEventListener("click", (e) => {
-  const thumb = e.target.closest(".source-thumb");
-  if (!thumb) return;
-  openLightbox(thumb.src, thumb.title);
+// ── Source citations: hover preview + click to open the lightbox ──
+// One floating preview shared by every citation; it is fixed-positioned so the
+// summary's scroll container can't clip it.
+const sourcePreview = document.createElement("div");
+sourcePreview.id = "source-preview";
+sourcePreview.className = "hidden";
+sourcePreview.innerHTML = `<img alt=""/><div class="source-preview-name"></div>`;
+document.body.appendChild(sourcePreview);
+const sourcePreviewImg  = sourcePreview.querySelector("img");
+const sourcePreviewName = sourcePreview.querySelector(".source-preview-name");
+let sourcePreviewRef = null, sourcePreviewHide = null;
+
+function showSourcePreview(ref) {
+  clearTimeout(sourcePreviewHide);
+  if (sourcePreviewRef === ref && !sourcePreview.classList.contains("hidden")) return;
+  sourcePreviewRef = ref;
+  sourcePreview.classList.remove("img-error");
+  sourcePreviewImg.onerror = () => sourcePreview.classList.add("img-error");
+  sourcePreviewImg.src = ref.dataset.src;
+  sourcePreviewName.textContent = ref.dataset.name;
+  sourcePreview.classList.remove("hidden");
+  // Above the citation, or below it when there isn't room; kept inside the window.
+  const r = ref.getBoundingClientRect(), p = sourcePreview.getBoundingClientRect(), gap = 6;
+  const top  = r.top - p.height - gap >= 8 ? r.top - p.height - gap : r.bottom + gap;
+  const left = Math.min(Math.max(8, r.left), window.innerWidth - p.width - 8);
+  sourcePreview.style.top  = `${top}px`;
+  sourcePreview.style.left = `${left}px`;
+}
+function hideSourcePreviewSoon() {
+  clearTimeout(sourcePreviewHide);
+  sourcePreviewHide = setTimeout(() => { sourcePreview.classList.add("hidden"); sourcePreviewRef = null; }, 150);
+}
+function openSourceRef(ref) {
+  sourcePreview.classList.add("hidden");
+  openLightbox(ref.dataset.src, ref.dataset.name);
+}
+
+els.summaryBody.addEventListener("mouseover", (e) => {
+  const ref = e.target.closest(".source-ref");
+  if (ref) showSourcePreview(ref);
 });
+els.summaryBody.addEventListener("mouseout", (e) => {
+  const ref = e.target.closest(".source-ref");
+  if (ref && !ref.contains(e.relatedTarget)) hideSourcePreviewSoon();
+});
+els.summaryBody.addEventListener("focusin", (e) => {
+  const ref = e.target.closest(".source-ref");
+  if (ref) showSourcePreview(ref);
+});
+els.summaryBody.addEventListener("focusout", (e) => {
+  if (e.target.closest(".source-ref")) hideSourcePreviewSoon();
+});
+els.summaryBody.addEventListener("click", (e) => {
+  const ref = e.target.closest(".source-ref");
+  if (ref) openSourceRef(ref);
+});
+els.summaryBody.addEventListener("keydown", (e) => {
+  const ref = e.target.closest(".source-ref");
+  if (ref && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openSourceRef(ref); }
+});
+document.addEventListener("scroll", () => sourcePreview.classList.add("hidden"), true);
+// Moving onto the preview keeps it open; clicking it opens the lightbox.
+sourcePreview.addEventListener("mouseenter", () => clearTimeout(sourcePreviewHide));
+sourcePreview.addEventListener("mouseleave", hideSourcePreviewSoon);
+sourcePreview.addEventListener("click", () => { if (sourcePreviewRef) openSourceRef(sourcePreviewRef); });
 
 // ── Settings modal ────────────────────────────────────────
 const settingsModal   = document.getElementById("settings-modal");
