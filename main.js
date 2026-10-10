@@ -198,7 +198,7 @@ function buildRedlistRecords(speciesDir) {
   for (const f of files) {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(speciesDir, f), "utf-8"));
-      const fmt = data.formatted_json || {};
+      const fmt = data.formatted_json || data;  // wrapped (VVGO/emulator) or flat VoucherVision JSON
       records.push({
         filename: f,
         source_image: path.basename(f, ".json"),
@@ -210,7 +210,7 @@ function buildRedlistRecords(speciesDir) {
         decimalLongitude:         fmt.decimalLongitude ?? null,
         inferredGPSConfidence:    fmt.inferredGPSConfidence ?? null,
         habitat:                  fmt.habitat ?? null,
-        specimenDescription:      fmt.specimenDescription ?? null,
+        specimenDescription:      fmt.specimenDescription ?? fmt.specimenNotes ?? null,
         minimumElevationInMeters: fmt.minimumElevationInMeters ?? null,
         maximumElevationInMeters: fmt.maximumElevationInMeters ?? null,
         collectionDate:           fmt.collectionDate ?? null,
@@ -441,7 +441,7 @@ function scanSpecimens(rootDir, speciesName) {
         state_province:       fmt.stateProvince        || null,
         locality:             fmt.locality             || null,
         habitat:              fmt.habitat              || null,
-        specimen_description: fmt.specimenDescription  || null,
+        specimen_description: fmt.specimenDescription  || fmt.specimenNotes || null,
         min_elevation:        parseFloat(fmt.minimumElevationInMeters) || null,
         max_elevation:        parseFloat(fmt.maximumElevationInMeters) || null,
         collection_date:      fmt.collectionDate       || null,
