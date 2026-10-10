@@ -1053,7 +1053,6 @@ async function openSettings() {
   settingsModal.classList.remove("hidden");
 }
 document.getElementById("settings-btn").addEventListener("click", openSettings);
-document.getElementById("settings-tab-btn")?.addEventListener("click", openSettings);
 
 document.getElementById("browse-root-btn").addEventListener("click", async () => {
   const folder = await window.api.browseForFolder();
@@ -2137,10 +2136,10 @@ const GbifPage = (function () {
       </div>
       <div class="gbif-chrome">
         <div class="gbif-nav">
-          <button class="btn ghost sm icon-btn" id="gbif-back" title="Back">‹</button>
-          <button class="btn ghost sm icon-btn" id="gbif-fwd" title="Forward">›</button>
-          <button class="btn ghost sm icon-btn" id="gbif-reload" title="Reload">⟳</button>
-          <button class="btn ghost sm icon-btn" id="gbif-home" title="GBIF specimen gallery">⌂</button>
+          <button class="btn ghost sm gbif-nav-btn" id="gbif-back" title="Back">‹</button>
+          <button class="btn ghost sm gbif-nav-btn" id="gbif-fwd" title="Forward">›</button>
+          <button class="btn ghost sm gbif-nav-btn" id="gbif-reload" title="Reload">⟳</button>
+          <button class="btn ghost sm gbif-nav-btn" id="gbif-home" title="GBIF specimen gallery">⌂</button>
         </div>
         <input class="input sm gbif-urlbar" id="gbif-url" placeholder="Search GBIF, or paste an occurrence URL / ID…" />
         <span class="gbif-status mono small" id="gbif-status"></span>

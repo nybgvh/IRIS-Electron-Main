@@ -335,10 +335,8 @@ body {
   -webkit-app-region: drag;
 }
 
-/* Mac: extra top padding so traffic lights don't overlap the logo */
-body.platform-mac #sidebar-header {
-  padding-top: 44px;
-}
+/* Mac: the traffic lights sit in the top tab bar (see #tabbar), so the
+   sidebar header needs no extra top padding. */
 
 #logo-block {
   display: flex;
@@ -1594,7 +1592,6 @@ body.platform-mac #sidebar-header {
   align-items: stretch;
   gap: 2px;
   height: 38px;
-  padding-left: 82px; /* clear the macOS traffic lights (hiddenInset) */
   background: var(--bg-mid);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
@@ -1617,21 +1614,8 @@ body.platform-mac #sidebar-header {
 .app-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
 .app-tab.active { color: var(--accent-text); border-bottom-color: var(--accent); }
 
-.tabbar-spacer { flex: 1; }
-.tabbar-icon {
-  -webkit-app-region: no-drag;
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 16px;
-  cursor: pointer;
-  transition: color var(--transition), background var(--transition);
-}
-.tabbar-icon:hover { color: var(--text-primary); background: var(--bg-hover); }
+/* Mac (hiddenInset): clear the traffic lights */
+body.platform-mac #tabbar { padding-left: 82px; }
 
 #app-body {
   display: flex;
@@ -1680,7 +1664,7 @@ body.platform-mac #sidebar-header {
   color: #d48888;
 }
 .btn.danger:hover:not(:disabled) { background: rgba(176,104,104,0.15); }
-.btn.icon-btn { padding: 5px 9px; font-size: 15px; line-height: 1; }
+.btn.gbif-nav-btn { padding: 5px 9px; font-size: 15px; line-height: 1; }
 .btn.ready { background: var(--accent); border-color: var(--accent); color: #08130a; }
 
 .input {
@@ -1804,8 +1788,8 @@ body.platform-mac #sidebar-header {
   cursor: default;
 }
 .modal-title { padding: 16px 18px 10px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
-.modal-body { padding: 0 18px 12px; font-size: 12.5px; color: var(--text-secondary); }
-.modal-body p { margin: 8px 0; }
+.modal-card .modal-body { padding: 0 18px 12px; font-size: 12.5px; color: var(--text-secondary); }
+.modal-card .modal-body p { margin: 8px 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--border); }
 .gbif-advisory {
   background: rgba(196,168,74,0.1);
