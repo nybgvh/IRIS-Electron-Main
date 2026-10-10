@@ -262,9 +262,10 @@ async function runRedlistNative(rootDir, speciesName, language) {
     const speciesDir = path.join(rootDir, sp);
     try {
       const records = buildRedlistRecords(speciesDir);
-      if (!records.length) { send({ event: "progress", species: sp, status: "skip", message: "No specimen JSON files found" }); failed++; continue; }
+      if (!records.length) { send({ event: "progress", species: sp, status: "skip", message: "No JSON specimen files found" }); failed++; continue; }
 
-      send({ event: "progress", species: sp, status: "generating", message: `Sending ${records.length} records to Gemini…` });
+      send({ event: "progress", species: sp, status: "start", message: `Reading ${records.length} specimen records…` });
+      send({ event: "progress", species: sp, status: "generating", message: `Sending ${records.length} records to Gemini — this may take a few minutes…` });
       const prompt = REDLIST_PROMPT_TEMPLATE
         .split("{language}").join(lang)
         .replace("{records}", JSON.stringify(records, null, 2));
@@ -279,7 +280,7 @@ async function runRedlistNative(rootDir, speciesName, language) {
         sections = parseRedlistResponse(text);
       } catch (e) {
         try { fs.writeFileSync(path.join(speciesDir, "_debug_response.txt"), text); } catch (_) {}
-        send({ event: "error", species: sp, message: `JSON parse failed: ${e.message}. See _debug_response.txt.` });
+        send({ event: "error", species: sp, message: `JSON parse failed: ${e.message}. Check _debug_response.txt in species folder.` });
         failed++; continue;
       }
 
@@ -294,13 +295,15 @@ async function runRedlistNative(rootDir, speciesName, language) {
       succeeded++;
     } catch (err) {
       if (run.cancel) break;
-      send({ event: "error", species: sp, message: err.message });
+      send({ event: "error", species: sp, message: geminiClient.friendlyGeminiError(err, { model: rl.model }) });
       failed++;
     }
   }
 
   activeRun = null;
-  send({ event: "finish", total: names.length, succeeded, failed });
+  // On cancel the renderer has already logged "cancelled"; a "finish" event
+  // would flip the panel to "Pipeline complete".
+  if (!run.cancel) send({ event: "finish", total: names.length, succeeded, failed });
   send({ event: "closed", code: run.cancel ? 1 : 0 });
 }
 
