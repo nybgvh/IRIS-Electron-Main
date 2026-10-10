@@ -771,18 +771,30 @@ ipcMain.handle("cancel-pipeline", () => {
 });
 
 // ── IPC: copy-images-to-pics ──────────────────────────────────────────────────
+// Adds images to an existing species. Files whose name (stem) is already in the
+// species — as an image in pics/ or as a transcribed <stem>.json — are skipped,
+// so re-adding a file never overwrites an image that already has a result.
 ipcMain.handle("copy-images-to-pics", async (_e, rootDir, speciesName, imagePaths) => {
   try {
-    const picsDir = path.join(rootDir, speciesName, "pics");
+    const speciesDir = path.join(rootDir, speciesName);
+    const picsDir    = path.join(speciesDir, "pics");
     if (!fs.existsSync(picsDir)) fs.mkdirSync(picsDir, { recursive: true });
 
-    const copied = [];
+    const stemOf = (f) => path.basename(f, path.extname(f));
+    const taken = new Set([
+      ...fs.readdirSync(picsDir).filter(f => IMG_EXTS.includes(path.extname(f).toLowerCase())).map(stemOf),
+      ...fs.readdirSync(speciesDir).filter(f => f.endsWith(".json") && !f.startsWith("red_list_summary")).map(stemOf),
+    ]);
+
+    const copied = [], skipped = [];
     for (const src of imagePaths) {
-      const dest = path.join(picsDir, path.basename(src));
-      fs.copyFileSync(src, dest);
-      copied.push(path.basename(src));
+      const name = path.basename(src);
+      if (taken.has(stemOf(name))) { skipped.push(name); continue; }
+      fs.copyFileSync(src, path.join(picsDir, name));
+      taken.add(stemOf(name));
+      copied.push(name);
     }
-    return { ok: true, copied };
+    return { ok: true, copied, skipped };
   } catch (err) {
     return { error: err.message };
   }
@@ -862,6 +874,20 @@ async function runVoucherNative(rootDir, speciesName) {
     send({ event: "fatal", message: "No usable images after processing." }); send({ event: "closed", code: 1 }); return;
   }
 
+  // Images that already have a <stem>.json were transcribed on an earlier run
+  // (or before more images were added): leave them alone.
+  const already = images.filter(img => fs.existsSync(path.join(speciesDir, `${path.basename(img, path.extname(img))}.json`)));
+  const skipped = already.length;
+  images = images.filter(img => !already.includes(img));
+  if (skipped) send({ event: "log", message: `Skipping ${skipped} already-transcribed image(s).` });
+  if (!images.length) {
+    activeRun = null;
+    send({ event: "progress", status: "complete", message: `All ${skipped} image(s) are already transcribed — nothing new to process.` });
+    send({ event: "done", succeeded: 0, failed: 0 });
+    send({ event: "closed", code: 0 });
+    return;
+  }
+
   // Emulator: every image is launched at once; two shared limiters gate the
   // stages (resize ×prepConcurrency, Gemini calls ×geminiConcurrency) so OCR
   // calls for early images overlap with resizing of later ones.
@@ -889,12 +915,6 @@ async function runVoucherNative(rootDir, speciesName) {
       if (idx >= images.length) break;
       const img  = images[idx];
       const stem = path.basename(img, path.extname(img));
-      // Already transcribed on an earlier run: keep the existing JSON.
-      if (fs.existsSync(path.join(speciesDir, `${stem}.json`))) {
-        ok++;
-        send({ event: "progress", status: "processing", message: `[${finished()}/${total}] ${img} — already transcribed, skipping.` });
-        continue;
-      }
       // Remote: one submit per worker, so announce each. Emulator: all are queued at once,
       // so only the per-image completion lines below are emitted.
       if (!useEmulator) send({ event: "progress", status: "processing", message: `[${idx + 1}/${total}] ${img}` });
@@ -933,14 +953,20 @@ async function runVoucherNative(rootDir, speciesName) {
   activeRun = null;
   // The renderer logs "cancelled" itself; just close the stream.
   if (run.cancel) { send({ event: "closed", code: 1 }); return; }
-  if (ok === 0) {
-    // Nothing transcribed: the renderer deletes the empty species (cleanup).
+  if (ok === 0 && skipped === 0) {
+    // Nothing transcribed, ever: the renderer deletes the empty species (cleanup).
     send({ event: "progress", status: "complete", message: `No specimens could be transcribed (${fail} failed).` });
     send({ event: "done", succeeded: 0, failed: fail, cleanup: true });
     send({ event: "closed", code: 0 });
     return;
   }
-  send({ event: "progress", status: "complete", message: `Done — ${ok}/${total} specimen(s) transcribed successfully${fail ? `, ${fail} failed` : ""}` });
+  if (ok === 0) {
+    // Only the newly added images failed; the species keeps its earlier specimens.
+    send({ event: "error", message: `No new specimens could be transcribed (${fail} failed).` });
+    send({ event: "closed", code: 1 });
+    return;
+  }
+  send({ event: "progress", status: "complete", message: `Done — ${ok}/${total} ${skipped ? "new " : ""}specimen(s) transcribed successfully${fail ? `, ${fail} failed` : ""}` });
   send({ event: "done", succeeded: ok, failed: fail });
   send({ event: "closed", code: 0 });
 }
