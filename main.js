@@ -6,6 +6,7 @@ const gbifService  = require("./gbif-service");
 const gbifCapture  = require("./gbif-capture");
 const vvClient     = require("./vouchervision-client");
 const vvEmulator   = require("./vouchervision-emulator");
+const imageNormalize = require("./image-normalize");
 const geminiClient = require("./gemini-client");
 
 let mainWindow;
@@ -418,7 +419,10 @@ function scanPics(rootDir, speciesName) {
   if (!fs.existsSync(picsDir)) return map;
   for (const f of fs.readdirSync(picsDir)) {
     const ext = path.extname(f).toLowerCase();
-    if (IMG_EXTS.includes(ext)) map[path.basename(f, ext)] = path.join(picsDir, f);
+    if (!IMG_EXTS.includes(ext)) continue;
+    // One entry per stem; prefer a copy Chromium can display (foo.jpg over foo.tif).
+    const stem = path.basename(f, ext), p = path.join(picsDir, f);
+    if (imageNormalize.preferForDisplay(map[stem], p)) map[stem] = p;
   }
   return map;
 }
@@ -812,6 +816,7 @@ ipcMain.handle("pick-images", async () => {
 const VV_MIME = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
   ".webp": "image/webp", ".tif": "image/tiff", ".tiff": "image/tiff",
+  ".jfif": "image/jpeg", ".heic": "image/heic", ".heif": "image/heif",
 };
 
 // Drop the huge base64 collage blobs before writing the response to disk — the
@@ -844,11 +849,28 @@ async function runVoucherNative(rootDir, speciesName) {
   const picsDir    = path.join(speciesDir, "pics");
   if (!fs.existsSync(picsDir)) { send({ event: "fatal", message: `No pics/ folder found in ${speciesName}.` }); send({ event: "closed", code: 1 }); return; }
 
-  const images = fs.readdirSync(picsDir).filter(f => IMG_EXTS.includes(path.extname(f).toLowerCase()));
-  if (!images.length) { send({ event: "fatal", message: `No images found in ${picsDir}` }); send({ event: "closed", code: 1 }); return; }
+  if (!fs.readdirSync(picsDir).some(f => IMG_EXTS.includes(path.extname(f).toLowerCase()))) {
+    send({ event: "fatal", message: `No images found in ${picsDir}` }); send({ event: "closed", code: 1 }); return;
+  }
 
   const run = { type: "vv", cancel: false, controller: new AbortController() };
   activeRun = run;
+
+  // TIFF / BMP / HEIC / JPEG 2000 get a <stem>.jpg copy that is transcribed instead.
+  let images;
+  try {
+    images = await imageNormalize.normalizePics(picsDir, IMG_EXTS, {
+      onWarn:      (message) => send({ event: "progress", status: "warn", message }),
+      onConverted: (from, to) => send({ event: "log", message: `Converted ${from} → ${to}` }),
+    });
+  } catch (err) {
+    images = [];
+    send({ event: "progress", status: "warn", message: `Could not prepare images: ${err.message}` });
+  }
+  if (!images.length) {
+    activeRun = null;
+    send({ event: "fatal", message: "No usable images after processing." }); send({ event: "closed", code: 1 }); return;
+  }
 
   // Emulator: every image is launched at once; two shared limiters gate the
   // stages (resize ×prepConcurrency, Gemini calls ×geminiConcurrency) so OCR
