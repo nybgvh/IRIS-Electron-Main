@@ -106,7 +106,7 @@ async function fetchMeta(id) {
 
 function requireRoot(rootDir) {
   if (!rootDir || !String(rootDir).trim()) {
-    throw new Error("No output folder is open. Set an Output Root Folder in Settings first.");
+    throw new Error("No output folder is open. Please set an output folder in Settings first.");
   }
   return String(rootDir);
 }

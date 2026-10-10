@@ -1649,6 +1649,12 @@ function onRootChanged() {
 //  and the existing lightbox. The browser-session download mechanism (inline
 //  same-origin fetch + attachment capture + UA fallback) is preserved intact.
 // ══════════════════════════════════════════════════════════
+// Same prompt the New species button uses when no output folder is set.
+function promptForOutputRoot() {
+  alert("Please set an output folder in Settings first.");
+  document.getElementById("settings-btn").click();
+}
+
 const GbifPage = (function () {
   const HOME = "https://www.gbif.org/occurrence/search?occurrenceStatus=present&view=GALLERY&basisOfRecord=PRESERVED_SPECIMEN&mediaType=StillImage";
   const BULK_CONCURRENCY = 16; // parallel image-download workers
@@ -1729,14 +1735,14 @@ const GbifPage = (function () {
       const onSpecimen = !!g.currentId;
       add.disabled = busy || !onSpecimen || noRoot;
       add.textContent = onSpecimen ? `＋ Add GBIF ${g.currentId} to Library` : "＋ Add to Library";
-      add.title = noRoot ? "Set an Output Root Folder in Settings first."
+      add.title = noRoot ? "Please set an output folder in Settings first."
         : onSpecimen ? "" : "Open a specimen occurrence first — click an image on GBIF.";
       add.classList.toggle("ready", onSpecimen && !busy && !noRoot);
     }
     const all = c.querySelector("#gbif-import");
     if (all) {
       all.disabled = busy || !g.onSearch || noRoot;
-      all.title = noRoot ? "Set an Output Root Folder in Settings first."
+      all.title = noRoot ? "Please set an output folder in Settings first."
         : g.onSearch ? "Import images from this search (all up to 500, or a random subset)"
         : "Open a GBIF search (gallery) first.";
     }
@@ -1809,7 +1815,7 @@ const GbifPage = (function () {
 
   async function addToLibrary() {
     if (g.busy) return;
-    if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
+    if (!state.rootDir) { promptForOutputRoot(); return; }
     const id = parseId(viewURL());
     if (!id) {
       toast("Open a specimen occurrence on GBIF (click an image), then Add.", "error");
@@ -1851,7 +1857,7 @@ const GbifPage = (function () {
 
   async function importFromSearch() {
     if (g.busy || g.bulk.running) return;
-    if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
+    if (!state.rootDir) { promptForOutputRoot(); return; }
     const url = viewURL();
     if (!/\/occurrence\/(search|gallery)/.test(url || "")) {
       toast("Open a GBIF search (gallery) first.", "error"); return;
@@ -2048,7 +2054,7 @@ const GbifPage = (function () {
   }
 
   async function bookmarkCurrent() {
-    if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
+    if (!state.rootDir) { promptForOutputRoot(); return; }
     const url = viewURL();
     if (!url || !/^https?:/i.test(url)) { toast("Browse GBIF first, then bookmark.", "error"); return; }
     try {
