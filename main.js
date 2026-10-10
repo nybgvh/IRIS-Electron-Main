@@ -367,18 +367,8 @@ function createWindow() {
   gbifCapture.setup(mainWindow); // silent capture of attachment-style GBIF images
 }
 
-// TEMP (dev testing): ensure a known account exists so the dev-login hint in the
-// UI works out of the box. Remove this and the #dev-login-hint element before release.
-function seedDevAccount() {
-  try {
-    const res = db.createUser("dev", "devpass123");
-    if (res && !res.error) console.log("[DEV] seeded test account dev / devpass123");
-  } catch (_) { /* already exists — fine */ }
-}
-
 app.whenReady().then(async () => {
   await db.init(app.getPath("userData"));
-  seedDevAccount();
   ensureSettingsDefaults();
   createWindow();
 });

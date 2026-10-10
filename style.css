@@ -1898,25 +1898,6 @@ body.platform-mac #sidebar-header {
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.error { border-color: #6a3a3a; color: #e0a0a0; }
 
-/* TEMP (dev testing): dev-login hint below the sign-in form. Remove before release. */
-#dev-login-hint {
-  display: block;
-  width: 100%;
-  margin-top: 14px;
-  padding: 8px 10px;
-  background: rgba(196,168,74,0.08);
-  border: 1px dashed rgba(196,168,74,0.45);
-  border-radius: var(--radius-sm);
-  color: #c9b26a;
-  font-family: var(--font-ui);
-  font-size: 11.5px;
-  text-align: center;
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition);
-}
-#dev-login-hint:hover { background: rgba(196,168,74,0.16); border-color: rgba(196,168,74,0.7); }
-#dev-login-hint code { font-family: var(--font-mono); color: #e0cd84; background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 3px; }
-
 /* ── Settings: advanced option groups (VoucherVision / Red List) ──────────── */
 #settings-modal .modal-body { max-height: 68vh; overflow-y: auto; }
 .settings-group {

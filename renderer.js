@@ -65,14 +65,6 @@ document.getElementById("login-btn").addEventListener("click", async () => {
   });
 });
 
-// TEMP (dev testing): click the hint to fill + submit the dev credentials.
-// Remove this block, #dev-login-hint (index.html) and seedDevAccount (main.js) before release.
-document.getElementById("dev-login-hint")?.addEventListener("click", () => {
-  document.getElementById("login-username").value = "dev";
-  document.getElementById("login-password").value = "devpass123";
-  document.getElementById("login-btn").click();
-});
-
 document.getElementById("register-btn").addEventListener("click", async () => {
   clearAuthError();
   const u  = document.getElementById("reg-username").value.trim();
