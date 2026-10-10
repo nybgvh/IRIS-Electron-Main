@@ -1007,7 +1007,7 @@ body {
 
 #source-preview {
   position: fixed;
-  z-index: 950;
+  z-index: 3000; /* above the map legend, modals and toasts */
   padding: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border-mid);
