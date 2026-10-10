@@ -6,6 +6,7 @@ const db   = require("./database");
 const gbifService  = require("./gbif-service");
 const gbifCapture  = require("./gbif-capture");
 const vvClient     = require("./vouchervision-client");
+const vvEmulator   = require("./vouchervision-emulator");
 const geminiClient = require("./gemini-client");
 
 let mainWindow;
@@ -14,10 +15,21 @@ let currentUser = null; // { id, username } while logged in
 
 // ── VoucherVisionGO settings ──────────────────────────────────────────────────
 // Prefilled with the experimental IRIS_Electron settings (see its .env.example).
-// The API key is NOT stored here — the native client authenticates with the
-// existing `authToken` setting ("VoucherVision Auth Token" in the Settings UI).
-// These are seeded into the user-managed settings.json and are editable there.
+// `backend` picks how specimens are processed:
+//   "emulator" — vouchervision-emulator/ runs the OCR + parsing Gemini calls
+//                locally with the existing `geminiApiKey` setting (default).
+//   "remote"   — vouchervision-client.js posts to the VoucherVisionGO server,
+//                authenticating with the `authToken` setting.
+// Keys are NOT stored here. These are seeded into the user-managed
+// settings.json and are editable there.
 const VV_DEFAULTS = {
+  backend:          "emulator",
+  ocrThinkingLevel: "low",      // emulator: Gemini 3 thinking level for the OCR call
+  llmThinkingLevel: "low",      // emulator: Gemini 3 thinking level for the parsing call
+  geminiApiBase:    "https://generativelanguage.googleapis.com",
+  geminiApiVersion: "v1beta",
+  prepConcurrency:  4,          // emulator: images resized at once (CPU-bound)
+  geminiConcurrency: 4,         // emulator: Gemini calls in flight at once (capped at image count)
   apiBaseUrl:       "https://vouchervision-go-738307415303.us-central1.run.app",
   endpoint:         "/process",
   prompt:           "SLTPvM_full.yaml",
@@ -30,7 +42,7 @@ const VV_DEFAULTS = {
   includeCop90:     true,
   vertexProject:    "",
   vertexRegion:     "global",
-  concurrency:      4,          // how many images submit at once
+  concurrency:      4,          // remote: how many images submit to the server at once
   submitTimeoutMs:  300000,     // 5-minute per-image timeout
   maxRetries:       2,          // retries on network / 5xx errors
 };
@@ -95,8 +107,27 @@ function ensureSettingsDefaults() {
 // the API key from the existing `authToken` setting.
 function buildVvConfig(settings) {
   const vv = { ...VV_DEFAULTS, ...(settings.vouchervision || {}) };
-  vv.apiKey = settings.authToken || "";
+  vv.apiKey       = settings.authToken || "";
+  vv.geminiApiKey = settings.geminiApiKey || "";
   return vv;
+}
+
+// Map the VV settings block onto the emulator's processImage() config.
+function buildEmulatorConfig(vv) {
+  return {
+    apiKey:           vv.geminiApiKey,
+    apiBase:          vv.geminiApiBase,
+    apiVersion:       vv.geminiApiVersion,
+    engines:          vv.engines,
+    llmModel:         vv.llmModel,
+    prompt:           vv.prompt,
+    ocrThinkingLevel: vv.ocrThinkingLevel,
+    llmThinkingLevel: vv.llmThinkingLevel,
+    ocrOnly:          vv.ocrOnly,
+    notebookMode:     vv.notebookMode,
+    timeoutMs:        vv.submitTimeoutMs,
+    maxRetries:       vv.maxRetries,
+  };
 }
 
 // Build the Red List config: seeded/edited settings plus the existing gemini key.
@@ -785,9 +816,16 @@ async function runVoucherNative(rootDir, speciesName) {
   const send = (msg) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("voucher-event", msg); };
   const settings = loadSettings();
   const vv = buildVvConfig(settings);
+  const useEmulator = vv.backend !== "remote";
+  const emulatorCfg = useEmulator ? buildEmulatorConfig(vv) : null;
 
-  if (!vv.apiKey)      { send({ event: "fatal", message: "No VoucherVision auth token set. Add it in Settings." }); send({ event: "closed", code: 1 }); return; }
-  if (!vv.apiBaseUrl)  { send({ event: "fatal", message: "No VoucherVision server URL set (vouchervision.apiBaseUrl in settings)." }); send({ event: "closed", code: 1 }); return; }
+  if (useEmulator) {
+    if (!vv.geminiApiKey) { send({ event: "fatal", message: "No Gemini API key set. Add it in Settings (or switch the VoucherVision backend to \"remote\")." }); send({ event: "closed", code: 1 }); return; }
+  } else {
+    if (!vv.apiKey)      { send({ event: "fatal", message: "No VoucherVision auth token set. Add it in Settings." }); send({ event: "closed", code: 1 }); return; }
+    if (!vv.apiBaseUrl)  { send({ event: "fatal", message: "No VoucherVision server URL set (vouchervision.apiBaseUrl in settings)." }); send({ event: "closed", code: 1 }); return; }
+  }
+  const backendLabel = useEmulator ? `local emulator (${vv.engines} → ${vv.llmModel})` : "VoucherVisionGO server";
 
   const speciesDir = path.join(rootDir, speciesName);
   const picsDir    = path.join(speciesDir, "pics");
@@ -798,7 +836,22 @@ async function runVoucherNative(rootDir, speciesName) {
 
   const run = { type: "vv", cancel: false, controller: new AbortController() };
   activeRun = run;
-  send({ event: "progress", status: "start", message: `Found ${images.length} images in pics/ — starting VoucherVision…` });
+
+  // Emulator: every image is launched at once; two shared limiters gate the
+  // stages (resize ×prepConcurrency, Gemini calls ×geminiConcurrency) so OCR
+  // calls for early images overlap with resizing of later ones.
+  let n;
+  if (useEmulator) {
+    const prepN   = Math.max(1, Math.min(vv.prepConcurrency || 4, images.length));
+    const geminiN = Math.max(1, Math.min(vv.geminiConcurrency || 4, images.length));
+    emulatorCfg.prepLimit   = vvEmulator.createLimiter(prepN);
+    emulatorCfg.geminiLimit = vvEmulator.createLimiter(geminiN);
+    n = images.length;
+    send({ event: "progress", status: "start", message: `Found ${images.length} images in pics/ — starting VoucherVision via ${backendLabel}; resize ×${prepN}, Gemini calls ×${geminiN}…` });
+  } else {
+    n = Math.min(vv.concurrency || 4, images.length);
+    send({ event: "progress", status: "start", message: `Found ${images.length} images in pics/ — starting VoucherVision via ${backendLabel}…` });
+  }
 
   let ok = 0, fail = 0;
   const cursor = { i: 0 };
@@ -808,14 +861,19 @@ async function runVoucherNative(rootDir, speciesName) {
       if (idx >= images.length) break;
       const img  = images[idx];
       const stem = path.basename(img, path.extname(img));
-      send({ event: "progress", status: "processing", message: `(${idx + 1}/${images.length}) ${img}…` });
+      // Remote: one submit per worker, so announce each. Emulator: all are queued at once,
+      // so only the per-image completion lines below are emitted.
+      if (!useEmulator) send({ event: "progress", status: "processing", message: `(${idx + 1}/${images.length}) ${img}…` });
+      const t0 = Date.now();
       try {
-        const bytes = fs.readFileSync(path.join(picsDir, img));
-        const result = await vvClient.submit(
-          vv,
-          { bytes, filename: img, mimeType: VV_MIME[path.extname(img).toLowerCase()] || "application/octet-stream" },
-          run.controller.signal
-        );
+        const imgPath = path.join(picsDir, img);
+        const mimeType = VV_MIME[path.extname(img).toLowerCase()] || "application/octet-stream";
+        const file = useEmulator
+          ? { bytes: () => fs.promises.readFile(imgPath), filename: img, mimeType }  // read lazily inside the prep limiter
+          : { bytes: fs.readFileSync(imgPath), filename: img, mimeType };
+        const result = useEmulator
+          ? await vvEmulator.processImage(file, emulatorCfg, run.controller.signal)
+          : await vvClient.submit(vv, file, run.controller.signal);
         // Normalise formatted_json to an object (server may return a JSON string)
         // and write a per-image <stem>.json in the shape scanSpecimens() reads.
         let fmt = result.formatted_json;
@@ -828,6 +886,9 @@ async function runVoucherNative(rootDir, speciesName) {
         };
         fs.writeFileSync(path.join(speciesDir, `${stem}.json`), JSON.stringify(out, null, 2));
         ok++;
+        const secs = ((Date.now() - t0) / 1000).toFixed(0);
+        const name = out.formatted_json.scientificName || out.formatted_json.catalogNumber || "";
+        send({ event: "progress", status: "processing", message: `✓ ${img} — ${secs}s${name ? ` — ${name}` : ""} (${ok + fail}/${images.length} finished)` });
       } catch (err) {
         if (run.cancel) break;
         fail++;
@@ -836,7 +897,6 @@ async function runVoucherNative(rootDir, speciesName) {
     }
   };
 
-  const n = Math.min(vv.concurrency || 4, images.length);
   await Promise.all(Array.from({ length: n }, () => worker()));
 
   activeRun = null;
@@ -850,7 +910,12 @@ async function runVoucherNative(rootDir, speciesName) {
 ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
   if (activeRun) return { error: "A pipeline is already running." };
   const settings = loadSettings();
-  if (!settings.authToken) return { error: "No VoucherVision auth token set. Add it in Settings." };
+  const vv = buildVvConfig(settings);
+  if (vv.backend === "remote") {
+    if (!settings.authToken) return { error: "No VoucherVision auth token set. Add it in Settings." };
+  } else if (!settings.geminiApiKey) {
+    return { error: "No Gemini API key set. Add it in Settings." };
+  }
   try { await runVoucherNative(rootDir, speciesName); return { ok: true }; }
   catch (err) { return { error: err.message }; }
 });

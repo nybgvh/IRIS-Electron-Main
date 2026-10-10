@@ -23,9 +23,13 @@ IRIS streamlines the Red List assessment workflow:
 
 ## Requirements
 
-- [Node.js LTS](https://nodejs.org/) (v18 or higher)
-- [Python 3.10 or 3.11](https://www.python.org/)
-- A [Gemini API key](https://aistudio.google.com/) 
+- [Node.js](https://nodejs.org/) 18 or later (includes npm)
+- Gemini API key
+- VoucherVision auth token — only if you switch the VoucherVision backend to
+  the remote VoucherVisionGO server (see below)
+
+No Python is required; `pipeline.py` / `voucher_pipeline.py` are the disabled
+legacy scripts.
 
 ## Installation
 
@@ -33,11 +37,32 @@ IRIS streamlines the Red List assessment workflow:
 git clone https://github.com/nybgvh/IRIS-Electron-Main.git
 cd IRIS-Electron-Main
 npm install
-pip install google-genai Pillow
+
+# 3. Run the app
 npm start
 ```
 
-## First-time Setup
+On first launch, open **Settings** in the app and add:
+- **Output Root Folder** — where species folders live
+- **Gemini API Key** — used for the Red List summary step and, by default, for
+  the VoucherVision voucher step
+- **VoucherVision Auth Token** — only needed for the remote backend
+
+## VoucherVision backends
+
+The voucher step (OCR + label parsing for every image in `<species>/pics/`) has
+two interchangeable backends, chosen under **Settings → VoucherVision options →
+Backend**:
+
+- **Local emulator** (default) — [vouchervision-emulator/](vouchervision-emulator/)
+  makes two Gemini calls per image (OCR, then parsing) using the verbatim
+  VoucherVision prompts and your Gemini API key. Produces the same
+  `<stem>.json` shape as the server. Smoke-test it on one image with
+  `npm run smoke:vv -- path/to/image.jpg`.
+- **VoucherVisionGO server** — posts the image to the remote `/process`
+  endpoint with the auth token.
+
+Both default to `gemini-3.1-flash-lite` and the `SLTPvM_full.yaml` prompt.
 
 1. Launch the app and register an account
 2. Click the ⚙ gear icon → Settings and enter:

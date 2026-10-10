@@ -985,6 +985,14 @@ const saveKeyBtn      = document.getElementById("save-key-btn");
 
 // Field schemas for the advanced settings sections (VoucherVision + Red List).
 const VV_FIELDS = [
+  { key: "backend",          label: "Backend",                 type: "select",
+    options: [["emulator", "Local emulator (Gemini API key)"], ["remote", "VoucherVisionGO server (auth token)"]] },
+  { key: "ocrThinkingLevel", label: "OCR thinking level (emulator)", type: "select", options: [["low","low"],["medium","medium"],["high","high"]] },
+  { key: "llmThinkingLevel", label: "LLM thinking level (emulator)", type: "select", options: [["low","low"],["medium","medium"],["high","high"]] },
+  { key: "geminiApiBase",    label: "Gemini API base (emulator)",   type: "text" },
+  { key: "geminiApiVersion", label: "Gemini API version (emulator)", type: "text" },
+  { key: "prepConcurrency",  label: "Image resizes at once (emulator)", type: "number" },
+  { key: "geminiConcurrency", label: "Gemini calls at once (emulator)", type: "number" },
   { key: "apiBaseUrl",       label: "Server URL",              type: "text" },
   { key: "endpoint",         label: "Endpoint",                type: "text" },
   { key: "prompt",           label: "Prompt",                  type: "text" },
@@ -997,7 +1005,7 @@ const VV_FIELDS = [
   { key: "includeCop90",     label: "Include COP90",           type: "bool" },
   { key: "vertexProject",    label: "Vertex project (optional)", type: "text" },
   { key: "vertexRegion",     label: "Vertex region",           type: "text" },
-  { key: "concurrency",      label: "Concurrency",             type: "number" },
+  { key: "concurrency",      label: "Concurrency (remote server)", type: "number" },
   { key: "submitTimeoutMs",  label: "Submit timeout (ms)",     type: "number" },
   { key: "maxRetries",       label: "Max retries",             type: "number" },
 ];
@@ -1015,6 +1023,11 @@ function renderSettingsFields(container, fields, values, prefix) {
     const v = values ? values[f.key] : undefined;
     if (f.type === "bool") {
       return `<label class="settings-check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}/> ${f.label}</label>`;
+    }
+    if (f.type === "select") {
+      const opts = f.options.map(([val, text]) =>
+        `<option value="${esc(val)}" ${String(v) === val ? "selected" : ""}>${esc(text)}</option>`).join("");
+      return `<label class="settings-field"><span>${f.label}</span><select id="${id}">${opts}</select></label>`;
     }
     const t = f.type === "number" ? "number" : "text";
     return `<label class="settings-field"><span>${f.label}</span>` +
