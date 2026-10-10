@@ -1743,7 +1743,7 @@ const GbifPage = (function () {
   }
 
   function onNav(url) {
-    const u = url || (g.view && g.view.getURL()) || "";
+    const u = url || (viewURL()) || "";
     g.currentId = parseId(u);
     g.onSearch = /\/occurrence\/search/.test(u) || /\/occurrence\/gallery/.test(u);
     const bar = g.container && g.container.querySelector("#gbif-url");
@@ -1810,7 +1810,7 @@ const GbifPage = (function () {
   async function addToLibrary() {
     if (g.busy) return;
     if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
-    const id = parseId(g.view && g.view.getURL());
+    const id = parseId(viewURL());
     if (!id) {
       toast("Open a specimen occurrence on GBIF (click an image), then Add.", "error");
       return;
@@ -1852,7 +1852,7 @@ const GbifPage = (function () {
   async function importFromSearch() {
     if (g.busy || g.bulk.running) return;
     if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
-    const url = g.view && g.view.getURL();
+    const url = viewURL();
     if (!/\/occurrence\/(search|gallery)/.test(url || "")) {
       toast("Open a GBIF search (gallery) first.", "error"); return;
     }
@@ -2049,7 +2049,7 @@ const GbifPage = (function () {
 
   async function bookmarkCurrent() {
     if (!state.rootDir) { toast("Set an Output Root Folder in Settings first.", "error"); return; }
-    const url = g.view && g.view.getURL();
+    const url = viewURL();
     if (!url || !/^https?:/i.test(url)) { toast("Browse GBIF first, then bookmark.", "error"); return; }
     try {
       const bm = await window.api.gbif.bookmark(state.rootDir, url);
@@ -2077,8 +2077,8 @@ const GbifPage = (function () {
     const view = c.querySelector("#gbif-view");
     g.view = view;
 
-    c.querySelector("#gbif-back").addEventListener("click", () => { if (view.canGoBack()) view.goBack(); });
-    c.querySelector("#gbif-fwd").addEventListener("click", () => { if (view.canGoForward()) view.goForward(); });
+    c.querySelector("#gbif-back").addEventListener("click", () => { if (viewCan("canGoBack")) view.goBack(); });
+    c.querySelector("#gbif-fwd").addEventListener("click", () => { if (viewCan("canGoForward")) view.goForward(); });
     c.querySelector("#gbif-reload").addEventListener("click", () => view.reload());
     c.querySelector("#gbif-home").addEventListener("click", () => view.loadURL(HOME));
     c.querySelector("#gbif-add").addEventListener("click", addToLibrary);
@@ -2152,9 +2152,13 @@ const GbifPage = (function () {
     loadBookmarks();
   }
 
+  // The webview throws on getURL()/canGoBack() until its first dom-ready.
+  function viewURL() { try { return g.view ? g.view.getURL() : ""; } catch (_) { return ""; } }
+  function viewCan(fn) { try { return !!(g.view && g.view[fn]()); } catch (_) { return false; } }
+
   // Shown on tab activation: mount once, then refresh per-root state.
   function show() { mount(); refresh(); }
-  function refresh() { if (!g.mounted) return; onNav(g.view && g.view.getURL()); loadBookmarks(); }
+  function refresh() { if (!g.mounted) return; onNav(viewURL()); loadBookmarks(); }
   function reset() { /* nothing to tear down; webview persists across sessions */ }
 
   return { show, refresh, reset, isMounted: () => g.mounted };
