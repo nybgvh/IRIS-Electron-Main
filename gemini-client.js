@@ -75,8 +75,13 @@ async function generateContent({
 
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
-        const err = new Error(`Gemini ${res.status}: ${detail.slice(0, 300)}`);
+        // Error bodies look like {"error":{"code","message","status"}}; keep the
+        // readable message and the status name instead of the raw JSON.
+        let msg = detail, apiStatus = "";
+        try { const e = JSON.parse(detail).error || {}; msg = e.message || detail; apiStatus = e.status || ""; } catch (_) {}
+        const err = new Error(`Gemini ${res.status}${apiStatus ? ` ${apiStatus}` : ""}: ${String(msg).slice(0, 300)}`);
         err.status = res.status;
+        err.apiStatus = apiStatus;
         throw err;
       }
 
@@ -135,6 +140,9 @@ function friendlyGeminiError(err, { model, filename } = {}) {
   const m      = model || "the selected model";
   const has    = (re) => re.test(raw);
 
+  if (filename && status === 400 && has(/Unable to process input image|image.*(invalid|unsupported|corrupt)/i)) {
+    return `${filename} — could not open image. File may be corrupted or in an unsupported format.`;
+  }
   if (status === 429 || has(/RESOURCE_EXHAUSTED/)) {
     return filename
       ? `Quota exceeded for ${filename} — ${m} requires billing enabled on your Google account. Go to aistudio.google.com to enable billing.`
