@@ -1,7 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs   = require("fs");
-const { spawn, spawnSync } = require("child_process");
 const db   = require("./database");
 const gbifService  = require("./gbif-service");
 const gbifCapture  = require("./gbif-capture");
@@ -54,35 +53,6 @@ const REDLIST_DEFAULTS = {
   apiBase:   "https://generativelanguage.googleapis.com",
   timeoutMs: 300000,
 };
-
-// ── Cross-platform Python resolution ────────────────────────────────────────
-// Different OSes (and even different installers on the same OS) expose the
-// Python interpreter under different command names. We probe a short list of
-// candidates once, cache the winner, and reuse it for every pipeline spawn.
-let cachedPythonCmd = null;
-
-function resolvePythonCmd() {
-  if (cachedPythonCmd) return cachedPythonCmd;
-
-  const candidates = process.platform === "win32"
-    ? ["python", "py", "python3"]
-    : ["python3", "python"];
-
-  for (const cmd of candidates) {
-    try {
-      const result = spawnSync(cmd, ["--version"], { stdio: "ignore" });
-      if (!result.error && result.status === 0) {
-        cachedPythonCmd = cmd;
-        return cmd;
-      }
-    } catch (_) { /* try next candidate */ }
-  }
-
-  // Nothing found — fall back to the most common default so the resulting
-  // error message ("Is Python installed and on PATH?") still makes sense.
-  cachedPythonCmd = process.platform === "win32" ? "python" : "python3";
-  return cachedPythonCmd;
-}
 
 // ── Settings (shared API key) ─────────────────────────────────────────────────
 const settingsPath = path.join(app.getPath("userData"), "settings.json");
@@ -746,9 +716,8 @@ ipcMain.handle("load-output-root", async () => {
 });
 
 // ── IPC: pipeline (Red List summaries) ────────────────────────────────────────
-// NATIVE Gemini HTTP path — replaces the Python pipeline.py subprocess (commented
-// out below), eliminating the last Python dependency. Emits the same
-// "pipeline-event" messages the renderer already consumes.
+// Native Gemini HTTP path (gemini-client.js). Emits the "pipeline-event"
+// messages the renderer consumes.
 ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
   if (activeRun) return { error: "Pipeline already running." };
   const settings = loadSettings();
@@ -791,10 +760,9 @@ ipcMain.handle("pick-images", async () => {
 });
 
 // ── IPC: run-voucher-pipeline ─────────────────────────────────────────────────
-// NATIVE VoucherVisionGO HTTP path — replaces the Python voucher_pipeline.py
-// subprocess (commented out below), eliminating the Python VoucherVision
-// dependency. Emits the same "voucher-event" NDJSON-shaped messages the renderer
-// already consumes (start / processing / complete / error / done / closed).
+// Native path: vouchervision-emulator/ (default) or the remote VoucherVisionGO
+// client. Emits the "voucher-event" messages the renderer consumes
+// (start / processing / complete / error / done / closed).
 
 const VV_MIME = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
@@ -919,57 +887,6 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
   try { await runVoucherNative(rootDir, speciesName); return { ok: true }; }
   catch (err) { return { error: err.message }; }
 });
-
-/* ── LEGACY: Python voucher_pipeline.py subprocess (replaced by the native
- *    VoucherVisionGO HTTP client above). Kept commented for reference; remove
- *    voucher_pipeline.py and the `VoucherVision` pip requirement once confident.
- *
- * ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
- *   const settings = loadSettings();
- *   if (!settings.authToken)      return { error: "No auth token set. Add it in Settings." };
- *   if (!settings.geminiApiKey)   return { error: "No Gemini API key set. Add it in Settings." };
- *   if (activeProcess)            return { error: "A pipeline is already running." };
- *
- *   const speciesDir = path.join(rootDir, speciesName);
- *   const scriptPath = path.join(__dirname, "voucher_pipeline.py");
- *   const args       = [scriptPath, speciesDir, settings.authToken, settings.geminiApiKey];
- *   const pythonCmd  = resolvePythonCmd();
- *
- *   return new Promise((resolve) => {
- *     let proc;
- *     try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"] }); }
- *     catch (err) { resolve({ error: `Could not start Python: ${err.message}` }); return; }
- *
- *     activeProcess = proc;
- *
- *     proc.stdout.on("data", (chunk) => {
- *       chunk.toString().split("\n").filter(Boolean).forEach(line => {
- *         try {
- *           const msg = JSON.parse(line);
- *           mainWindow.webContents.send("voucher-event", msg);
- *         } catch (_) {
- *           mainWindow.webContents.send("voucher-event", { event: "log", message: line });
- *         }
- *       });
- *     });
- *
- *     proc.stderr.on("data", chunk => {
- *       mainWindow.webContents.send("voucher-event", { event: "log", message: chunk.toString() });
- *     });
- *
- *     proc.on("close", code => {
- *       activeProcess = null;
- *       mainWindow.webContents.send("voucher-event", { event: "closed", code });
- *       resolve({ ok: true, code });
- *     });
- *
- *     proc.on("error", err => {
- *       activeProcess = null;
- *       resolve({ error: `Process error: ${err.message}` });
- *     });
- *   });
- * });
- */
 
 // ── IPC: GBIF import ──────────────────────────────────────────────────────────
 // Follows the app convention: resolve the user via requireUser(), pass the

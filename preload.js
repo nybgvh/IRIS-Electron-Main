@@ -37,13 +37,10 @@ contextBridge.exposeInMainWorld("api", {
   pickImages:         ()        => ipcRenderer.invoke("pick-images"),
   copyImagesToPics:   (r,s,ps)  => ipcRenderer.invoke("copy-images-to-pics", r, s, ps),
 
-  // Voucher pipeline (runs local VoucherVision, vendored in the app)
+  // Voucher pipeline (native JS: vouchervision-emulator by default)
   runVoucherPipeline: (r,s)     => ipcRenderer.invoke("run-voucher-pipeline", r, s),
   onVoucherEvent:     (cb)      => ipcRenderer.on("voucher-event", (_e,msg) => cb(msg)),
   offVoucherEvent:    ()        => ipcRenderer.removeAllListeners("voucher-event"),
-  voucherOpenRunLog:  ()        => ipcRenderer.invoke("voucher-open-run-log"),
-
-  // Local VoucherVision environment setup
 
   // Red list pipeline
   runPipeline:        (r,s,lang) => ipcRenderer.invoke("run-pipeline", r, s, lang),
