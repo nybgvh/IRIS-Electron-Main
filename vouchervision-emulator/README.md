@@ -3,8 +3,9 @@
 Produces a VoucherVisionGO `/process`-shaped response locally, with two direct
 Gemini REST calls (OCR, then parsing) through IRIS's own `gemini-client.js` and
 the Gemini API key from Settings. No Python, no LangChain, no SDK, no new
-dependencies. Selected with the `backend: "emulator"` VoucherVision setting
-(default); `backend: "remote"` keeps using `vouchervision-client.js`.
+dependencies. Selected with `vouchervision.backend: "emulator"` in settings.json
+(the default; not shown in the Settings UI); `"remote"` keeps using
+`vouchervision-client.js`.
 
 ```
 index.js            processImage({bytes, filename, mimeType}, cfg, signal) → response
