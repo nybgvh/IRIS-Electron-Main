@@ -222,6 +222,39 @@ function buildRedlistRecords(speciesDir) {
   return records;
 }
 
+// Plain-text copy of a summary for reading outside the app (same layout as the
+// former pipeline.py output). Non-fatal: the JSON file is the primary output.
+const REDLIST_SECTION_TITLES = {
+  taxonomy:         "1. Taxonomy",
+  geographic_range: "2. Geographic Range",
+  habitat:          "3. Habitat",
+  ecology:          "4. Ecology",
+  use_and_trade:    "5. Use and Trade",
+  threats:          "6. Threats and Conservation Actions",
+};
+
+function writeRedlistText(speciesDir, output) {
+  const rule = "=".repeat(60);
+  const lines = [
+    "IRIS — Integrated Red List Inference from Specimens",
+    rule,
+    `Species:   ${String(output.species || "").replace(/_/g, " ")}`,
+    `Language:  ${output.language || "English"}`,
+    `Model:     ${output.model || ""}`,
+    `Generated: ${output.generated_at || ""}`,
+    rule,
+    "",
+  ];
+  for (const [key, title] of Object.entries(REDLIST_SECTION_TITLES)) {
+    const text = String((output.sections || {})[key] || "No information available from specimen records.")
+      .replace(/^\*\s+/gm, "  • ")            // bullets first, so "*   **Label**" isn't read as italics
+      .replace(/\*\*(.+?)\*\*/g, "$1")      // bold
+      .replace(/\*([^*\n]+?)\*/g, "$1");     // italic (single line)
+    lines.push(title, "-".repeat(title.length), text, "");
+  }
+  try { fs.writeFileSync(path.join(speciesDir, "red_list_summary_rd.txt"), lines.join("\n") + "\n", "utf-8"); } catch (_) {}
+}
+
 function parseRedlistResponse(text) {
   let t = String(text).trim();
   t = t.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
@@ -289,6 +322,7 @@ async function runRedlistNative(rootDir, speciesName, language) {
         model: rl.model, language: lang, species: sp, sections,
       };
       fs.writeFileSync(path.join(speciesDir, "red_list_summary_rd.json"), JSON.stringify(output, null, 2));
+      writeRedlistText(speciesDir, output);
       if (user) { try { db.updateSummary(user.id, sp, rootDir, output); } catch (_) {} }
 
       send({ event: "done", species: sp });
