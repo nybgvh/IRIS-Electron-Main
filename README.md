@@ -7,11 +7,12 @@ Gemini.
 ## Requirements
 
 - [Node.js](https://nodejs.org/) 18 or later (includes npm)
-- [Python](https://www.python.org/downloads/) 3.9 or later, available on your
-  `PATH` as `python3`, `python`, or (on Windows) the `py` launcher — the app
-  auto-detects whichever is present
-- Gemini API key 
-- VoucherVision auth token
+- Gemini API key
+- VoucherVision auth token — only if you switch the VoucherVision backend to
+  the remote VoucherVisionGO server (see below)
+
+No Python is required; `pipeline.py` / `voucher_pipeline.py` are the disabled
+legacy scripts.
 
 ## Setup
 
@@ -23,20 +24,31 @@ cd iucn-browser
 # 2. Install Node dependencies
 npm install
 
-# 3. Install Python dependencies
-pip install -r requirements.txt
-# on macOS/Linux, use pip3 if `pip` isn't mapped to Python 3:
-pip3 install -r requirements.txt
-
-# 4. Run the app
+# 3. Run the app
 npm start
 ```
 
 On first launch, open **Settings** in the app and add:
 - **Output Root Folder** — where species folders live
-- **Gemini API Key** — used for both the Red List summary step and the
-  VoucherVision voucher step
-- **VoucherVision Auth Token** — used for the voucher step
+- **Gemini API Key** — used for the Red List summary step and, by default, for
+  the VoucherVision voucher step
+- **VoucherVision Auth Token** — only needed for the remote backend
+
+## VoucherVision backends
+
+The voucher step (OCR + label parsing for every image in `<species>/pics/`) has
+two interchangeable backends, chosen under **Settings → VoucherVision options →
+Backend**:
+
+- **Local emulator** (default) — [vouchervision-emulator/](vouchervision-emulator/)
+  makes two Gemini calls per image (OCR, then parsing) using the verbatim
+  VoucherVision prompts and your Gemini API key. Produces the same
+  `<stem>.json` shape as the server. Smoke-test it on one image with
+  `npm run smoke:vv -- path/to/image.jpg`.
+- **VoucherVisionGO server** — posts the image to the remote `/process`
+  endpoint with the auth token.
+
+Both default to `gemini-3.1-flash-lite` and the `SLTPvM_full.yaml` prompt.
 
 All credentials are stored locally in Electron's per-user app-data directory
 (never committed to the repo).

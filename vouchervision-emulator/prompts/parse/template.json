@@ -1,0 +1,22 @@
+{
+  "_source": "VoucherVision vouchervision/prompt_catalog.py PromptCatalog.prompt_SLTP (non-PaLM branch) and vouchervision/LLM_GoogleGemini.py GoogleGeminiHandler._ensure_runtime_ready (LangChain PromptTemplate wrapper). Copied verbatim, including the 16-space continuation indentation of the Python f-string.",
+  "_notes": "Placeholders {instructions}, {json_formatting_instructions}, {rules}, {OCR}, {dictionary_structure} are substituted by parse.js. `rules` is the rules map serialized like Python json.dumps(sort_keys=False) (', ' and ': ' separators, ensure_ascii). `OCR` has every ':' and '\"' removed (remove_colons_and_double_apostrophes). `dictionary_structure` is {key: ''} for every rule key — VoucherVision renders it with Python repr (single quotes); the emulator renders it as JSON (same keys, same order). The wrapper lines come from LangChain: template 'Answer the user query.\\n{format_instructions}\\n{query}\\n' where JsonOutputParser().get_format_instructions() == 'Return a JSON object.'.",
+  "wrapper_prefix_lines": [
+    "Answer the user query.",
+    "Return a JSON object."
+  ],
+  "wrapper_suffix": "\n",
+  "prompt_lines": [
+    "Please help me complete this text parsing task given the following rules and unstructured OCR text. Your task is to refactor the OCR text into a structured JSON dictionary that matches the structure specified in the following rules. Please follow the rules strictly.",
+    "                The rules are:",
+    "                {instructions}",
+    "                {json_formatting_instructions}",
+    "                This is the JSON template that includes instructions for each key:",
+    "                {rules}",
+    "                The unstructured OCR text is:",
+    "                {OCR}",
+    "                Please populate the following JSON dictionary based on the rules and the unformatted OCR text:",
+    "                {dictionary_structure}",
+    "                "
+  ]
+}

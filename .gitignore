@@ -58,3 +58,6 @@ desktop.ini
 # ── Env files ────────────────────────────────────────────────────────────────
 .env
 .env.local
+
+# Claude Code temp files
+*.tmp.*

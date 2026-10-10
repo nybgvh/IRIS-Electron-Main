@@ -7,7 +7,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "smoke:vv": "electron vouchervision-emulator/smoke.js"
   },
   "devDependencies": {
     "electron": "^42.5.0"
