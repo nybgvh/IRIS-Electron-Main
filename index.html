@@ -270,15 +270,12 @@
           </div>
           <p class="field-hint">All credentials stored locally on your machine.</p>
 
-          <details class="settings-group">
-            <summary>VoucherVision options</summary>
-            <p class="field-hint">Backend <em>Local emulator</em> runs the VoucherVision OCR + parsing prompts directly against Gemini with the Gemini API Key above. Backend <em>VoucherVisionGO server</em> posts to the remote <code>/process</code> endpoint using the VoucherVision Auth Token.</p>
+          <details class="settings-group" id="advanced-settings">
+            <summary>Advanced</summary>
+            <p class="field-hint">Transcription sends each image to Gemini twice, once to read the label (OCR) and once to fill in the specimen fields, using the VoucherVision prompts and the key above.</p>
+            <div class="settings-subhead">Transcription</div>
             <div id="vv-settings-fields" class="settings-fields"></div>
-          </details>
-
-          <details class="settings-group">
-            <summary>Red List (Gemini) options</summary>
-            <p class="field-hint">Used for summary generation. Auth uses the Gemini API Key above.</p>
+            <div class="settings-subhead">Red List summaries</div>
             <div id="redlist-settings-fields" class="settings-fields"></div>
           </details>
         </div>

@@ -976,35 +976,24 @@ const keyToggle       = document.getElementById("key-toggle");
 const saveKeyBtn      = document.getElementById("save-key-btn");
 
 // Field schemas for the advanced settings sections (VoucherVision + Red List).
+// Fields shown under Settings → Advanced. Everything else in the
+// vouchervision / redlist blocks (remote VoucherVisionGO backend, API bases,
+// OCR-only / notebook modes) stays editable in settings.json only.
+const THINKING_LEVELS = [["low", "Low"], ["medium", "Medium"], ["high", "High"]];
 const VV_FIELDS = [
-  { key: "backend",          label: "Backend",                 type: "select",
-    options: [["emulator", "Local emulator (Gemini API key)"], ["remote", "VoucherVisionGO server (auth token)"]] },
-  { key: "ocrThinkingLevel", label: "OCR thinking level (emulator)", type: "select", options: [["low","low"],["medium","medium"],["high","high"]] },
-  { key: "llmThinkingLevel", label: "LLM thinking level (emulator)", type: "select", options: [["low","low"],["medium","medium"],["high","high"]] },
-  { key: "geminiApiBase",    label: "Gemini API base (emulator)",   type: "text" },
-  { key: "geminiApiVersion", label: "Gemini API version (emulator)", type: "text" },
-  { key: "prepConcurrency",  label: "Image resizes at once (emulator)", type: "number" },
-  { key: "geminiConcurrency", label: "Gemini calls at once (emulator)", type: "number" },
-  { key: "apiBaseUrl",       label: "Server URL",              type: "text" },
-  { key: "endpoint",         label: "Endpoint",                type: "text" },
-  { key: "prompt",           label: "Prompt",                  type: "text" },
-  { key: "engines",          label: "OCR engines (comma-sep)", type: "text" },
-  { key: "llmModel",         label: "LLM model",               type: "text" },
-  { key: "ocrOnly",          label: "OCR only",                type: "bool" },
-  { key: "notebookMode",     label: "Notebook mode",           type: "bool" },
-  { key: "skipLabelCollage", label: "Skip label collage",      type: "bool" },
-  { key: "includeWfo",       label: "Include WFO",             type: "bool" },
-  { key: "includeCop90",     label: "Include COP90",           type: "bool" },
-  { key: "vertexProject",    label: "Vertex project (optional)", type: "text" },
-  { key: "vertexRegion",     label: "Vertex region",           type: "text" },
-  { key: "concurrency",      label: "Concurrency (remote server)", type: "number" },
-  { key: "submitTimeoutMs",  label: "Submit timeout (ms)",     type: "number" },
-  { key: "maxRetries",       label: "Max retries",             type: "number" },
+  { key: "llmModel",          label: "Parsing model",          type: "text" },
+  { key: "engines",           label: "OCR model(s)",           type: "text", hint: "Comma-separated; each model reads the label and the text is combined." },
+  { key: "ocrThinkingLevel",  label: "OCR thinking level",     type: "select", options: THINKING_LEVELS },
+  { key: "llmThinkingLevel",  label: "Parsing thinking level", type: "select", options: THINKING_LEVELS },
+  { key: "prompt",            label: "Prompt",                 type: "text" },
+  { key: "geminiConcurrency", label: "Gemini calls at once",   type: "number" },
+  { key: "prepConcurrency",   label: "Images prepared at once", type: "number" },
+  { key: "submitTimeoutMs",   label: "Request timeout (ms)",   type: "number" },
+  { key: "maxRetries",        label: "Retries",                type: "number" },
 ];
 const REDLIST_FIELDS = [
-  { key: "model",     label: "Gemini model",   type: "text" },
-  { key: "apiBase",   label: "Gemini API base", type: "text" },
-  { key: "timeoutMs", label: "Timeout (ms)",    type: "number" },
+  { key: "model",     label: "Model",        type: "text" },
+  { key: "timeoutMs", label: "Timeout (ms)", type: "number" },
 ];
 
 function renderSettingsFields(container, fields, values, prefix) {
@@ -1013,17 +1002,18 @@ function renderSettingsFields(container, fields, values, prefix) {
   container.innerHTML = fields.map(f => {
     const id = `${prefix}-field-${f.key}`;
     const v = values ? values[f.key] : undefined;
+    const hint = f.hint ? `<span class="field-hint">${esc(f.hint)}</span>` : "";
     if (f.type === "bool") {
       return `<label class="settings-check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}/> ${f.label}</label>`;
     }
     if (f.type === "select") {
       const opts = f.options.map(([val, text]) =>
         `<option value="${esc(val)}" ${String(v) === val ? "selected" : ""}>${esc(text)}</option>`).join("");
-      return `<label class="settings-field"><span>${f.label}</span><select id="${id}">${opts}</select></label>`;
+      return `<label class="settings-field"><span class="field-label">${f.label}</span><select id="${id}">${opts}</select>${hint}</label>`;
     }
     const t = f.type === "number" ? "number" : "text";
-    return `<label class="settings-field"><span>${f.label}</span>` +
-      `<input type="${t}" id="${id}" value="${esc(v)}" autocomplete="off"/></label>`;
+    return `<label class="settings-field"><span class="field-label">${f.label}</span>` +
+      `<input type="${t}" id="${id}" value="${esc(v)}" autocomplete="off"/>${hint}</label>`;
   }).join("");
 }
 
