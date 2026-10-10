@@ -20,13 +20,21 @@ const FATAL_STATUSES = new Set([400, 401, 403, 404]);
 
 async function postWithTimeout(url, init, timeoutMs, signal) {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs);
   if (signal) {
     if (signal.aborted) ctl.abort();
     else signal.addEventListener("abort", () => ctl.abort(), { once: true });
   }
   try {
     return await fetch(url, { ...init, signal: ctl.signal });
+  } catch (err) {
+    if (timedOut) {
+      const e = new Error(`Gemini request timed out after ${Math.round(timeoutMs / 1000)}s`);
+      e.code = "ETIMEDOUT";
+      throw e;
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -117,4 +125,48 @@ async function generateJson({ apiKey, model, apiBase, prompt, timeoutMs, signal 
   return text;
 }
 
-module.exports = { generateContent, generateJson, DEFAULT_API_BASE, DEFAULT_API_VERSION };
+// Map a Gemini failure to a user-facing message (wording from the former
+// pipeline.py / voucher_pipeline.py). Pass `filename` for per-image messages
+// (transcription); omit it for Red List summaries.
+function friendlyGeminiError(err, { model, filename } = {}) {
+  const raw    = String((err && err.message) || err || "");
+  const lower  = raw.toLowerCase();
+  const status = (err && err.status) || 0;
+  const m      = model || "the selected model";
+  const has    = (re) => re.test(raw);
+
+  if (status === 429 || has(/RESOURCE_EXHAUSTED/)) {
+    return filename
+      ? `Quota exceeded for ${filename} — ${m} requires billing enabled on your Google account. Go to aistudio.google.com to enable billing.`
+      : `Quota exceeded — ${m} requires billing enabled. Go to aistudio.google.com to enable billing.`;
+  }
+  if (status === 401 || status === 403 || has(/UNAUTHENTICATED|PERMISSION_DENIED|API_KEY_INVALID|API key not valid/i)) {
+    return filename
+      ? `Invalid API key for ${filename} — check your Gemini API key in Settings.`
+      : "Invalid API key — check your Gemini API key in Settings.";
+  }
+  if (status === 404 || has(/NOT_FOUND/)) {
+    return filename
+      ? `Model not available for ${filename} — check your API key has access to ${m}.`
+      : `Model not available — check your API key has access to ${m}.`;
+  }
+  if (status === 504 || (err && err.code === "ETIMEDOUT") || has(/DEADLINE_EXCEEDED/)) {
+    return filename
+      ? `Timeout processing ${filename} — image may be too large. Try a smaller image.`
+      : "Request timed out — try again or reduce the number of specimens.";
+  }
+  if (status === 500 || has(/INTERNAL/)) {
+    return filename
+      ? `Gemini server error for ${filename} — please try again in a moment.`
+      : "Gemini server error — please try again in a moment.";
+  }
+  if (status === 503 || has(/UNAVAILABLE|ENOTFOUND|ECONNRESET|ECONNREFUSED|EAI_AGAIN/) ||
+      lower.includes("fetch failed") || lower.includes("network") || lower.includes("connection")) {
+    return filename
+      ? `Could not reach Gemini for ${filename} — please check your internet connection and try again.`
+      : "Could not reach Gemini — please check your internet connection and try again.";
+  }
+  return filename ? `Failed ${filename}: ${raw.slice(0, 120)}` : `Gemini API error: ${raw.slice(0, 150)}`;
+}
+
+module.exports = { generateContent, generateJson, friendlyGeminiError, DEFAULT_API_BASE, DEFAULT_API_VERSION };
