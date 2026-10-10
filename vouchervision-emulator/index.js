@@ -16,7 +16,7 @@ const { sanitizeForStorage, sanitizeExcelRecord } = require("./sanitize");
 const { createLimiter, passthrough } = require("./limiter");
 
 const HOST_NAME       = "IRIS-VoucherVision-Emulator";
-const DEFAULT_MODEL   = "gemini-3.1-flash-lite";
+const DEFAULT_MODEL   = "gemini-3.1-pro-preview";
 const DEFAULT_PROMPT  = "SLTPvM_full.yaml";
 const THINKING_LEVELS = new Set(["low", "medium", "high"]);
 
