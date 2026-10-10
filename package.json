@@ -24,6 +24,13 @@
       "index.html",
       "style.css",
       "database.js",
+      "gemini-client.js",
+      "vouchervision-client.js",
+      "gbif-service.js",
+      "gbif-capture.js",
+      "vouchervision-emulator/**/*",
+      "!vouchervision-emulator/smoke.js",
+      "!vouchervision-emulator/README.md",
       "node_modules/**/*"
     ],
     "win": {
