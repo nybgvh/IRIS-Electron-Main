@@ -1421,6 +1421,45 @@ async function runVoucherPipeline(rootDir, speciesName) {
 }
 
 
+// ── Add images to an existing species ───────────────────────
+// Copies the picked files into <species>/pics/ (names already in the species are
+// skipped) and runs transcription, which only processes images without a result.
+const addImagesBtn = document.getElementById("add-images-btn");
+addImagesBtn.addEventListener("click", async () => {
+  if (!state.rootDir || !state.active) return;
+  const rootDir = state.rootDir, speciesName = state.active;
+
+  const paths = await window.api.pickImages();
+  if (!paths || !paths.length) return;
+
+  const res = await window.api.copyImagesToPics(rootDir, speciesName, paths);
+  if (!res || res.error) { alert(`Could not add images: ${res ? res.error : "unknown error"}`); return; }
+  if (!res.copied.length) {
+    alert(res.skipped.length === 1 ? "That image is already in this project." : "All selected images are already in this project.");
+    return;
+  }
+
+  addImagesBtn.disabled = true;
+  generateBtn.disabled  = true;
+  const run = runVoucherPipeline(rootDir, speciesName);
+  if (res.skipped.length) appendVoucherRawLog(`Already in this project, not added: ${res.skipped.join(", ")}`);
+  try { await run; } finally {
+    addImagesBtn.disabled = false;
+    generateBtn.disabled  = false;
+  }
+
+  // Show the new specimens in the counts, map and records.
+  const r  = await window.api.refreshSpecies(rootDir, speciesName);
+  const sp = state.species.find(s => s.name === speciesName);
+  if (sp && r && !r.error) {
+    sp.specimenCount = r.specimenCount;
+    sp.hasSummary    = r.hasSummary;
+    renderSpeciesList();
+    updateStats();
+    if (state.active === speciesName) selectSpecies(sp);
+  }
+});
+
 // "Generate summary now" — hide itself after click so it doesn't linger
 voucherThenSumBtn.addEventListener("click", () => {
   voucherThenSumBtn.classList.add("hidden");

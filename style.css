@@ -626,7 +626,7 @@ body {
 
 #viewer-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 
-#copy-btn {
+#copy-btn, #add-images-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -641,7 +641,8 @@ body {
   transition: all var(--transition);
 }
 
-#copy-btn:hover { background: var(--bg-hover); color: var(--accent-text); border-color: var(--accent-dim); }
+#copy-btn:hover, #add-images-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--accent-text); border-color: var(--accent-dim); }
+#add-images-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 #copy-btn.copied { color: var(--accent); border-color: var(--accent-dim); }
 
 /* ── Section nav ─────────────────────────────────────────── */
