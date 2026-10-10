@@ -1483,8 +1483,9 @@ async function runVoucherPipeline(rootDir, speciesName) {
 
 
 // ── Add images to an existing species ───────────────────────
-// Copies the picked files into <species>/pics/ (names already in the species are
-// skipped) and runs transcription, which only processes images without a result.
+// Same mechanism as New species: copy the picked files into <species>/pics/,
+// then run transcription, which processes every image without a result. Files
+// whose name already has a result are not re-copied.
 const addImagesBtn = document.getElementById("add-images-btn");
 addImagesBtn.addEventListener("click", async () => {
   if (!state.rootDir || !state.active) return;
@@ -1495,15 +1496,11 @@ addImagesBtn.addEventListener("click", async () => {
 
   const res = await window.api.copyImagesToPics(rootDir, speciesName, paths);
   if (!res || res.error) { alert(`Could not add images: ${res ? res.error : "unknown error"}`); return; }
-  if (!res.copied.length) {
-    alert(res.skipped.length === 1 ? "That image is already in this project." : "All selected images are already in this project.");
-    return;
-  }
 
   addImagesBtn.disabled = true;
   generateBtn.disabled  = true;
   const run = runVoucherPipeline(rootDir, speciesName);
-  if (res.skipped.length) appendVoucherRawLog(`Already in this project, not added: ${res.skipped.join(", ")}`);
+  if (res.skipped.length) appendVoucherRawLog(`Already transcribed in this project, not re-added: ${res.skipped.join(", ")}`);
   try { await run; } finally {
     addImagesBtn.disabled = false;
     generateBtn.disabled  = false;

@@ -771,9 +771,10 @@ ipcMain.handle("cancel-pipeline", () => {
 });
 
 // ── IPC: copy-images-to-pics ──────────────────────────────────────────────────
-// Adds images to an existing species. Files whose name (stem) is already in the
-// species — as an image in pics/ or as a transcribed <stem>.json — are skipped,
-// so re-adding a file never overwrites an image that already has a result.
+// Adds images to an existing species, like create-species does for a new one.
+// Only files whose name (stem) already has a transcription result (<stem>.json)
+// are skipped, so re-adding never overwrites an image behind an existing result;
+// anything without a result is copied and gets transcribed on the next run.
 ipcMain.handle("copy-images-to-pics", async (_e, rootDir, speciesName, imagePaths) => {
   try {
     const speciesDir = path.join(rootDir, speciesName);
@@ -781,17 +782,15 @@ ipcMain.handle("copy-images-to-pics", async (_e, rootDir, speciesName, imagePath
     if (!fs.existsSync(picsDir)) fs.mkdirSync(picsDir, { recursive: true });
 
     const stemOf = (f) => path.basename(f, path.extname(f));
-    const taken = new Set([
-      ...fs.readdirSync(picsDir).filter(f => IMG_EXTS.includes(path.extname(f).toLowerCase())).map(stemOf),
-      ...fs.readdirSync(speciesDir).filter(f => f.endsWith(".json") && !f.startsWith("red_list_summary")).map(stemOf),
-    ]);
+    const transcribed = new Set(
+      fs.readdirSync(speciesDir).filter(f => f.endsWith(".json") && !f.startsWith("red_list_summary")).map(stemOf)
+    );
 
     const copied = [], skipped = [];
     for (const src of imagePaths) {
       const name = path.basename(src);
-      if (taken.has(stemOf(name))) { skipped.push(name); continue; }
+      if (transcribed.has(stemOf(name))) { skipped.push(name); continue; }
       fs.copyFileSync(src, path.join(picsDir, name));
-      taken.add(stemOf(name));
       copied.push(name);
     }
     return { ok: true, copied, skipped };
