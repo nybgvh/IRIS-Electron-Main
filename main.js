@@ -833,9 +833,9 @@ async function runVoucherNative(rootDir, speciesName) {
   const emulatorCfg = useEmulator ? buildEmulatorConfig(vv) : null;
 
   if (useEmulator) {
-    if (!vv.geminiApiKey) { send({ event: "fatal", message: "No Gemini API key set. Add it in Settings (or switch the VoucherVision backend to \"remote\")." }); send({ event: "closed", code: 1 }); return; }
+    if (!vv.geminiApiKey) { send({ event: "fatal", message: "No Gemini API key set. Add it in Settings." }); send({ event: "closed", code: 1 }); return; }
   } else {
-    if (!vv.apiKey)      { send({ event: "fatal", message: "No VoucherVision auth token set. Add it in Settings." }); send({ event: "closed", code: 1 }); return; }
+    if (!vv.apiKey)      { send({ event: "fatal", message: "No VoucherVision auth token set (authToken in settings.json)." }); send({ event: "closed", code: 1 }); return; }
     if (!vv.apiBaseUrl)  { send({ event: "fatal", message: "No VoucherVision server URL set (vouchervision.apiBaseUrl in settings)." }); send({ event: "closed", code: 1 }); return; }
   }
   const backendLabel = useEmulator ? `local emulator (${vv.engines} → ${vv.llmModel})` : "VoucherVisionGO server";
@@ -860,13 +860,16 @@ async function runVoucherNative(rootDir, speciesName) {
     emulatorCfg.prepLimit   = vvEmulator.createLimiter(prepN);
     emulatorCfg.geminiLimit = vvEmulator.createLimiter(geminiN);
     n = images.length;
-    send({ event: "progress", status: "start", message: `Found ${images.length} images in pics/ — starting VoucherVision via ${backendLabel}; resize ×${prepN}, Gemini calls ×${geminiN}…` });
   } else {
     n = Math.min(vv.concurrency || 4, images.length);
-    send({ event: "progress", status: "start", message: `Found ${images.length} images in pics/ — starting VoucherVision via ${backendLabel}…` });
   }
+  send({ event: "progress", status: "start", message: `Processing ${images.length} image(s)…` });
+  send({ event: "log", message: `Backend: ${backendLabel}` });
+  send({ event: "progress", status: "processing", message: `Transcribing ${images.length} image(s) with Gemini — this may take a few minutes…` });
 
   let ok = 0, fail = 0;
+  const total = images.length;
+  const finished = () => ok + fail;
   const cursor = { i: 0 };
   const worker = async () => {
     while (!run.cancel) {
@@ -874,10 +877,15 @@ async function runVoucherNative(rootDir, speciesName) {
       if (idx >= images.length) break;
       const img  = images[idx];
       const stem = path.basename(img, path.extname(img));
+      // Already transcribed on an earlier run: keep the existing JSON.
+      if (fs.existsSync(path.join(speciesDir, `${stem}.json`))) {
+        ok++;
+        send({ event: "progress", status: "processing", message: `[${finished()}/${total}] ${img} — already transcribed, skipping.` });
+        continue;
+      }
       // Remote: one submit per worker, so announce each. Emulator: all are queued at once,
       // so only the per-image completion lines below are emitted.
-      if (!useEmulator) send({ event: "progress", status: "processing", message: `(${idx + 1}/${images.length}) ${img}…` });
-      const t0 = Date.now();
+      if (!useEmulator) send({ event: "progress", status: "processing", message: `[${idx + 1}/${total}] ${img}` });
       try {
         const imgPath = path.join(picsDir, img);
         const mimeType = VV_MIME[path.extname(img).toLowerCase()] || "application/octet-stream";
@@ -899,13 +907,11 @@ async function runVoucherNative(rootDir, speciesName) {
         };
         fs.writeFileSync(path.join(speciesDir, `${stem}.json`), JSON.stringify(out, null, 2));
         ok++;
-        const secs = ((Date.now() - t0) / 1000).toFixed(0);
-        const name = out.formatted_json.scientificName || out.formatted_json.catalogNumber || "";
-        send({ event: "progress", status: "processing", message: `✓ ${img} — ${secs}s${name ? ` — ${name}` : ""} (${ok + fail}/${images.length} finished)` });
+        send({ event: "progress", status: "processing", message: `[${finished()}/${total}] ${img} — done ✓` });
       } catch (err) {
         if (run.cancel) break;
         fail++;
-        send({ event: "progress", status: "error", message: `${img}: ${err.message}` });
+        send({ event: "progress", status: "warn", message: geminiClient.friendlyGeminiError(err, { model: vv.llmModel, filename: img }) });
       }
     }
   };
@@ -913,10 +919,17 @@ async function runVoucherNative(rootDir, speciesName) {
   await Promise.all(Array.from({ length: n }, () => worker()));
 
   activeRun = null;
-  if (run.cancel) { send({ event: "error", message: "Cancelled by user." }); send({ event: "closed", code: 1 }); return; }
-  send({ event: "progress", status: "complete", message: `VoucherVision finished — ${ok} JSON file(s) generated${fail ? `, ${fail} failed` : ""}` });
-  if (ok === 0) { send({ event: "fatal", message: `All ${images.length} image(s) failed.` }); send({ event: "closed", code: 1 }); return; }
-  send({ event: "done" });
+  // The renderer logs "cancelled" itself; just close the stream.
+  if (run.cancel) { send({ event: "closed", code: 1 }); return; }
+  if (ok === 0) {
+    // Nothing transcribed: the renderer deletes the empty species (cleanup).
+    send({ event: "progress", status: "complete", message: `No specimens could be transcribed (${fail} failed).` });
+    send({ event: "done", succeeded: 0, failed: fail, cleanup: true });
+    send({ event: "closed", code: 0 });
+    return;
+  }
+  send({ event: "progress", status: "complete", message: `Done — ${ok}/${total} specimen(s) transcribed successfully${fail ? `, ${fail} failed` : ""}` });
+  send({ event: "done", succeeded: ok, failed: fail });
   send({ event: "closed", code: 0 });
 }
 
@@ -925,7 +938,7 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
   const settings = loadSettings();
   const vv = buildVvConfig(settings);
   if (vv.backend === "remote") {
-    if (!settings.authToken) return { error: "No VoucherVision auth token set. Add it in Settings." };
+    if (!settings.authToken) return { error: "No VoucherVision auth token set (authToken in settings.json)." };
   } else if (!settings.geminiApiKey) {
     return { error: "No Gemini API key set. Add it in Settings." };
   }
