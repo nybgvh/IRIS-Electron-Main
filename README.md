@@ -36,7 +36,7 @@ npm install
 pip install google-genai Pillow
 npm start
 ```
-
+> **After the first install, you only need to run `npm start` to launch the app.**
 ## First-time Setup
 
 1. Launch the app and register an account
