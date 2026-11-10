@@ -1586,7 +1586,19 @@ body.platform-mac #sidebar-header {
 /* ── GBIF tab ─────────────────────────────────────────────── */
 #gbif-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #gbif-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-#gbif-toolbar .action-btn { flex: 0 0 auto; padding: 6px 10px; }
+#gbif-toolbar .action-btn, #gbif-tray .action-btn {
+  flex: 0 0 auto; padding: 10px 18px; font-size: 14px; font-weight: 700; letter-spacing: 0.2px;
+  border: 1.5px solid var(--accent-dim); color: var(--text-primary); border-radius: 8px;
+}
+#gbif-toolbar #gbif-back, #gbif-toolbar #gbif-fwd { padding: 10px 16px; font-size: 18px; line-height: 1; }
+#gbif-add, #gbif-add-search { background: var(--accent-dim); color: var(--bg-deep) !important; border-color: var(--accent-dim) !important; }
+#gbif-add:not(:disabled):hover, #gbif-add-search:not(:disabled):hover { background: var(--accent) !important; color: var(--bg-deep) !important; }
+#gbif-toolbar { gap: 10px; padding: 12px 14px; }
+#gbif-search-n { width: 72px; padding: 9px 8px; font-size: 14px; font-weight: 600; }
+#gbif-hint { font-size: 12px; }
+#gbif-count { font-size: 15px; }
+#gbif-status { font-size: 12px; }
+#gbif-create { padding: 11px 22px; font-size: 15px; font-weight: 700; border-radius: 8px; }
 #gbif-hint { flex: 1; min-width: 120px; font-size: 11px; color: var(--text-muted); }
 .gbif-from { display: inline-flex; align-items: center; gap: 4px; }
 #gbif-search-n { width: 58px; padding: 5px 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; }
