@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld("api", {
   copyImagesToPics:   (r,s,ps)  => ipcRenderer.invoke("copy-images-to-pics", r, s, ps),
 
   // Voucher pipeline (runs local VoucherVision, vendored in the app)
-  runVoucherPipeline: (r,s)     => ipcRenderer.invoke("run-voucher-pipeline", r, s),
+  runVoucherPipeline: (r,s,m,g) => ipcRenderer.invoke("run-voucher-pipeline", r, s, m, g),
   onVoucherEvent:     (cb)      => ipcRenderer.on("voucher-event", (_e,msg) => cb(msg)),
   offVoucherEvent:    ()        => ipcRenderer.removeAllListeners("voucher-event"),
   voucherOpenRunLog:  ()        => ipcRenderer.invoke("voucher-open-run-log"),
@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("api", {
   // Local VoucherVision environment setup
 
   // Red list pipeline
+  gbifSearch:         (n,l)     => ipcRenderer.invoke("gbif-search", n, l),
+  gbifImport:         (r,s,refs)=> ipcRenderer.invoke("gbif-import", r, s, refs),
   runPipeline:        (r,s,lang) => ipcRenderer.invoke("run-pipeline", r, s, lang),
   cancelPipeline:     ()        => ipcRenderer.invoke("cancel-pipeline"),
   onPipelineEvent:    (cb)      => ipcRenderer.on("pipeline-event", (_e,msg) => cb(msg)),

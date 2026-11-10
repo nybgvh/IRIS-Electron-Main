@@ -24,7 +24,6 @@ IRIS streamlines the Red List assessment workflow:
 ## Requirements
 
 - [Node.js LTS](https://nodejs.org/) (v18 or higher)
-- [Python 3.10 or 3.11](https://www.python.org/)
 - A [Gemini API key](https://aistudio.google.com/) 
 
 ## Installation
@@ -33,7 +32,6 @@ IRIS streamlines the Red List assessment workflow:
 git clone https://github.com/nybgvh/IRIS-Electron-Main.git
 cd IRIS-Electron-Main
 npm install
-pip install google-genai Pillow
 npm start
 ```
 > **After the first install, you only need to run `npm start` to launch the app.**

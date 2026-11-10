@@ -1282,7 +1282,7 @@ function appendVoucherRawLog(message) {
 }
 
 // Core voucher pipeline runner — called both from processImagesBtn and createSpeciesBtn
-async function runVoucherPipeline(rootDir, speciesName) {
+async function runVoucherPipeline(rootDir, speciesName, mode, gbifRefs) {
   openVoucherPanel(`Processing images — ${speciesName.replace(/_/g, " ")}`);
 
   window.api.offVoucherEvent();
@@ -1347,7 +1347,7 @@ async function runVoucherPipeline(rootDir, speciesName) {
     }
   });
 
-  const result = await window.api.runVoucherPipeline(rootDir, speciesName);
+  const result = await window.api.runVoucherPipeline(rootDir, speciesName, mode, gbifRefs);
   if (result && result.error) {
     appendVoucherLog("error", result.error);
     voucherClose.disabled    = false;
@@ -1383,6 +1383,8 @@ function openNewSpeciesModal() {
   newSpeciesError.classList.add("hidden");
   newSpeciesStatus.textContent = "";
   selectedImages = [];
+  document.getElementById("gbif-refs").value = "";
+  document.getElementById("gbif-status").textContent = "";
   imageDropLabel.textContent = "Click to select images";
   imageDropCount.textContent = "";
   newSpeciesModal.classList.remove("hidden");
@@ -1414,6 +1416,19 @@ imageDropZone.addEventListener("click", async () => {
   imageDropZone.classList.add("has-images");
 });
 
+// Find herbarium specimens with images on GBIF for the typed species name
+document.getElementById("gbif-find-btn").addEventListener("click", async () => {
+  const name = newSpeciesNameInp.value.trim();
+  const st   = document.getElementById("gbif-status");
+  if (!name) { st.textContent = "Enter the species name first."; return; }
+  st.textContent = "Searching GBIF…";
+  const res = await window.api.gbifSearch(name, 20);
+  if (res.error) { st.textContent = res.error; return; }
+  if (!res.results.length) { st.textContent = "No specimens with images found."; return; }
+  document.getElementById("gbif-refs").value = res.results.map(r => r.id).join("\n");
+  st.textContent = `Found ${res.results.length} specimen(s) with images — delete any IDs you don't want.`;
+});
+
 // Create species
 createSpeciesBtn.addEventListener("click", async () => {
   newSpeciesError.classList.add("hidden");
@@ -1424,8 +1439,9 @@ createSpeciesBtn.addEventListener("click", async () => {
     newSpeciesError.classList.remove("hidden");
     return;
   }
-  if (!selectedImages.length) {
-    newSpeciesError.textContent = "Please select at least one image.";
+  const gbifRefs = (document.getElementById("gbif-refs").value || "").split(/[\s,]+/).filter(Boolean);
+  if (!selectedImages.length && !gbifRefs.length) {
+    newSpeciesError.textContent = "Please select at least one image or add GBIF specimens.";
     newSpeciesError.classList.remove("hidden");
     return;
   }
@@ -1466,7 +1482,8 @@ createSpeciesBtn.addEventListener("click", async () => {
   await selectSpecies(sp);
 
   // Run VoucherVision directly — images are already in pics/, no re-picking needed
-  await runVoucherPipeline(result.rootDir, result.folderName);
+  const modeEl = document.querySelector('input[name="transcribe-mode"]:checked');
+  await runVoucherPipeline(result.rootDir, result.folderName, modeEl ? modeEl.value : "gemini", gbifRefs);
 
   createSpeciesBtn.disabled = false;
 });

@@ -203,7 +203,13 @@
           <input id="new-species-name" type="text" placeholder="e.g. Carissa spinarum" autocomplete="off" />
           <p class="field-hint">Spaces will be replaced with underscores in the folder name.</p>
 
-          <label class="field-label" style="margin-top:12px">Herbarium images</label>
+          <label class="field-label" style="margin-top:12px">Image type</label>
+          <div style="display:flex;gap:16px;font-size:12px;margin-bottom:4px">
+            <label><input type="radio" name="transcribe-mode" value="gemini" checked /> Herbarium specimen (Gemini)</label>
+            <label><input type="radio" name="transcribe-mode" value="ocr" /> Textbook / document (Tesseract, local)</label>
+          </div>
+
+          <label class="field-label" style="margin-top:12px">Images</label>
           <div id="image-drop-zone">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -212,6 +218,12 @@
             </svg>
             <span id="image-drop-label">Click to select images</span>
             <small id="image-drop-count"></small>
+          </div>
+          <label class="field-label" style="margin-top:12px">Import from GBIF (optional)</label>
+          <textarea id="gbif-refs" rows="3" placeholder="GBIF occurrence IDs or URLs, one per line" style="width:100%;font-size:12px"></textarea>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+            <button type="button" id="gbif-find-btn" class="cta-btn" style="padding:4px 10px;font-size:12px">Find on GBIF</button>
+            <span id="gbif-status" style="font-size:11px;color:var(--text-muted)"></span>
           </div>
           <div id="new-species-error" class="hidden" style="margin-top:8px;background:rgba(176,104,104,0.15);border:1px solid #b06868;border-radius:4px;color:#d48888;font-size:12px;padding:8px 12px"></div>
         </div>

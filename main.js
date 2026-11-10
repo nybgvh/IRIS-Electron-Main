@@ -1,19 +1,9 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs   = require("fs");
-const { spawn } = require("child_process");
 const db   = require("./database");
 
-// ── Path helper for packaged app ─────────────────────────────────────────────
-// When packaged with electron-builder, .py files live in app.asar.unpacked
-function pyScript(name) {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "app.asar.unpacked", name)
-    : path.join(__dirname, name);
-}
-
 let mainWindow;
-let activeProcess    = null;
 let currentUser = null; // { id, username } while logged in
 
 // ── Settings (shared API key) ─────────────────────────────────────────────────
@@ -425,168 +415,88 @@ ipcMain.handle("create-species", async (_e, speciesName, imagePaths) => {
 });
 
 
-// ── Python spawn environment ──────────────────────────────────────────────────
-const os = require("os");
+// ── Pipelines run in-process (pure JavaScript, no Python) ─────────────────────
+const pipelines = require("./pipelines");
+const gbif      = require("./gbif");
+let abortCtl = null;
+const send = (channel, msg) => { try { mainWindow.webContents.send(channel, msg); } catch (_) {} };
 
-function getPythonEnv() {
-  const env = { ...process.env };
-  if (process.platform === "darwin") {
-    // Do NOT set PYTHONPATH - let Python use its own system site-packages
-    // Just ensure Python bin dirs are on PATH for findPython()
-    env.PATH = [
-      "/Library/Frameworks/Python.framework/Versions/3.11/bin",
-      "/Library/Frameworks/Python.framework/Versions/3.10/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-      "/usr/bin",
-      "/bin",
-    ].join(":");
-    delete env.PYTHONPATH;
-    env.PYTHONNOUSERSITE = "0";
-  }
-  return env;
-}
-
-// ── Find best Python on Mac ───────────────────────────────────────────────────
-function findPython() {
-  if (process.platform === "win32") return "python";
-  // Use the Xcode CommandLineTools Python which is arm64 and has
-  // packages installed correctly via /usr/bin/python3
-  const candidates = [
-    "/Library/Developer/CommandLineTools/usr/bin/python3",
-    "/usr/bin/python3",
-    "python3",
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return "python3";
-}
-// ── IPC: run-pipeline ─────────────────────────────────────────────────────────
+// ── IPC: run-pipeline (Red List summary) ──────────────────────────────────────
 ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
   const settings = loadSettings();
   if (!settings.geminiApiKey) return { error: "No Gemini API key set. Add it in Settings." };
-  if (activeProcess)          return { error: "A pipeline is already running." };
-
-  const scriptPath = pyScript("pipeline.py");
-  const args       = [scriptPath, rootDir, settings.geminiApiKey];
-  if (speciesName) args.push(speciesName);
-  args.push(language || "English");
-
-  const pythonCmd = findPython();
-  const user      = currentUser;
-
-  return new Promise((resolve) => {
-    let proc;
-    try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"], env: getPythonEnv() }); }
-    catch (err) {
-        const msg = err.code === 'ENOENT'
-          ? 'Python not found. Please install Python 3.10 or 3.11 from python.org and ensure it is added to PATH.'
-          : `Could not start Python: ${err.message}`;
-        resolve({ error: msg });
-        return;
-      }
-
-    activeProcess = proc;
-
-    proc.stdout.on("data", (chunk) => {
-      chunk.toString().split("\n").filter(Boolean).forEach(line => {
-        try {
-          const msg = JSON.parse(line);
-          if (msg.event === "done" && msg.species && user) {
-            try {
-              const data = readSummaryFile(rootDir, msg.species);
-              if (data) db.updateSummary(user.id, msg.species, rootDir, data);
-            } catch (_) {}
-          }
-          mainWindow.webContents.send("pipeline-event", msg);
-        } catch (_) {}
-      });
-    });
-
-    proc.stderr.on("data", chunk => {
-      const pipelineStderr = chunk.toString();
-        if (pipelineStderr.includes("Microsoft Store") || pipelineStderr.includes("was not found")) {
-          mainWindow.webContents.send("pipeline-event", { event: "error", message: "Python not found. Please install Python 3.10 or 3.11 from python.org and make sure to check \"Add Python to PATH\" during installation." });
-        } else {
-          mainWindow.webContents.send("pipeline-event", { event: "stderr", message: pipelineStderr });
+  if (abortCtl)               return { error: "A pipeline is already running." };
+  const user = currentUser;
+  abortCtl = new AbortController();
+  try {
+    await pipelines.runSummary({
+      outputRoot: rootDir, species: speciesName, apiKey: settings.geminiApiKey, language,
+      signal: abortCtl.signal,
+      emit: (msg) => {
+        if (msg.event === "done" && msg.species && user) {
+          try {
+            const data = readSummaryFile(rootDir, msg.species);
+            if (data) db.updateSummary(user.id, msg.species, rootDir, data);
+          } catch (_) {}
         }
+        send("pipeline-event", msg);
+      },
     });
-
-    proc.on("close", code => {
-      activeProcess = null;
-      mainWindow.webContents.send("pipeline-event", { event: "closed", code });
-      resolve({ ok: true, code });
-    });
-
-    proc.on("error", err => {
-      activeProcess = null;
-      resolve({ error: `Process error: ${err.message}` });
-    });
-  });
+  } catch (err) {
+    send("pipeline-event", { event: "error", species: speciesName, message: `Unexpected error: ${err.message}` });
+  } finally {
+    abortCtl = null;
+    send("pipeline-event", { event: "closed", code: 0 });
+  }
+  return { ok: true, code: 0 };
 });
 
 // ── IPC: cancel-pipeline ──────────────────────────────────────────────────────
 ipcMain.handle("cancel-pipeline", () => {
-  if (activeProcess) { activeProcess.kill(); activeProcess = null; return true; }
+  if (abortCtl) { abortCtl.abort(); return true; }
   return false;
 });
 
-// ── IPC: run-voucher-pipeline ─────────────────────────────────────────────────
-ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
+// ── IPC: run-voucher-pipeline (transcription: Gemini or Tesseract) ────────────
+ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName, mode, gbifRefs) => {
   const settings = loadSettings();
-  if (!settings.geminiApiKey) return { error: "No Gemini API key set. Add it in Settings." };
-  if (activeProcess)         return { error: "A pipeline is already running." };
-
-  const speciesDir = path.join(rootDir, speciesName);
-  const scriptPath = pyScript("voucher_pipeline.py");
-  const pythonCmd  = findPython();
-  const args       = [scriptPath, speciesDir, settings.geminiApiKey];
-
-  return new Promise((resolve) => {
-    let proc;
-    try { proc = spawn(pythonCmd, args, { stdio: ["ignore", "pipe", "pipe"], env: getPythonEnv() }); }
-    catch (err) {
-        const msg = err.code === 'ENOENT'
-          ? 'Python not found. Please install Python 3.10 or 3.11 from python.org and ensure it is added to PATH.'
-          : `Could not start Python: ${err.message}`;
-        resolve({ error: msg });
-        return;
-      }
-
-    activeProcess = proc;
-
-    proc.stdout.on("data", (chunk) => {
-      chunk.toString().split("\n").filter(Boolean).forEach(line => {
-        try {
-          const msg = JSON.parse(line);
-          mainWindow.webContents.send("voucher-event", msg);
-        } catch (_) {
-          mainWindow.webContents.send("voucher-event", { event: "log", message: line });
-        }
-      });
+  const isOcr = mode === "ocr";
+  if (!isOcr && !settings.geminiApiKey) return { error: "No Gemini API key set. Add it in Settings." };
+  if (abortCtl) return { error: "A pipeline is already running." };
+  abortCtl = new AbortController();
+  try {
+    if (gbifRefs && gbifRefs.length) {
+      send("voucher-event", { event: "progress", status: "start", message: `Importing ${gbifRefs.length} specimen image(s) from GBIF…` });
+      const r = await gbif.importOccurrences(path.join(rootDir, speciesName), gbifRefs,
+        (m) => send("voucher-event", { event: "progress", ...m }), abortCtl.signal);
+      send("voucher-event", { event: "progress", status: "processing",
+        message: `GBIF: ${r.imported} imported${r.skipped ? `, ${r.skipped} already present` : ""}${r.failed ? `, ${r.failed} failed` : ""}` });
+    }
+    if (abortCtl.signal.aborted) throw new Error("Cancelled");
+    await pipelines.runTranscription({
+      speciesDir: path.join(rootDir, speciesName), apiKey: settings.geminiApiKey, mode,
+      signal: abortCtl.signal, emit: (msg) => send("voucher-event", msg),
     });
+  } catch (err) {
+    send("voucher-event", { event: "fatal", message: `Unexpected error: ${err.message}` });
+  } finally {
+    abortCtl = null;
+    send("voucher-event", { event: "closed", code: 0 });
+  }
+  return { ok: true, code: 0 };
+});
 
-    proc.stderr.on("data", chunk => {
-      const stderrMsg = chunk.toString();
-        if (stderrMsg.includes("Microsoft Store") || stderrMsg.includes("was not found")) {
-          mainWindow.webContents.send("voucher-event", { event: "error", message: "Python not found. Please install Python 3.10 or 3.11 from python.org and make sure to check \"Add Python to PATH\" during installation." });
-        } else {
-          mainWindow.webContents.send("voucher-event", { event: "log", message: stderrMsg });
-        }
-    });
-
-    proc.on("close", code => {
-      activeProcess = null;
-      mainWindow.webContents.send("voucher-event", { event: "closed", code });
-      resolve({ ok: true, code });
-    });
-
-    proc.on("error", err => {
-      activeProcess = null;
-      resolve({ error: `Process error: ${err.message}` });
-    });
-  });
+// ── IPC: GBIF ─────────────────────────────────────────────────────────────────
+ipcMain.handle("gbif-search", async (_e, name, limit) => {
+  try { return { results: await gbif.searchBySpecies(name, limit || 20) }; }
+  catch (err) { return { error: `GBIF search failed: ${err.message}` }; }
+});
+ipcMain.handle("gbif-import", async (_e, rootDir, speciesName, refs) => {
+  try {
+    const res = await gbif.importOccurrences(path.join(rootDir, speciesName), refs || [],
+      (m) => send("voucher-event", { event: "progress", ...m }));
+    return res;
+  } catch (err) { return { error: `GBIF import failed: ${err.message}` }; }
 });
 
 ipcMain.handle("voucher-open-run-log", () => {
