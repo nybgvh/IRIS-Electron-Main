@@ -399,6 +399,8 @@ async function selectSpecies(sp) {
     el.classList.toggle("active", el.dataset.name === sp.name);
   });
 
+  if (typeof hideGbifTab === "function") hideGbifTab();
+
   // Show viewer
   els.welcome.classList.add("hidden");
   els.viewer.classList.remove("hidden");
@@ -424,6 +426,23 @@ async function selectSpecies(sp) {
         <p>No <code>red_list_summary_rd.json</code> found for <em>${sp.displayName}</em>.</p>
         <p style="font-size:12px; margin-top:6px;">Run the assessment pipeline to generate a summary.</p>
       </div>`;
+    // Images present but not transcribed yet (e.g. a project created from GBIF): offer to transcribe
+    const pics = await window.api.resolvePics(state.rootDir, sp.name).catch(() => ({}));
+    const picCount = Object.keys(pics || {}).length;
+    if (!specimens.length && picCount) {
+      const box = document.createElement("div");
+      box.className = "no-summary-msg";
+      box.innerHTML = `
+        <p><strong>${picCount} image${picCount !== 1 ? "s" : ""}</strong> ready to transcribe.</p>
+        <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; justify-content:center">
+          <button class="cta-btn" data-mode="gemini">Transcribe labels (Gemini)</button>
+          <button class="cta-btn" data-mode="ocr">Transcribe text (OCR, local)</button>
+        </div>
+        <p style="font-size:11px; margin-top:8px;">Gemini reads herbarium labels into fields. OCR reads plain printed text such as textbook pages.</p>`;
+      box.querySelectorAll("button[data-mode]").forEach((b) =>
+        b.addEventListener("click", () => runVoucherPipeline(state.rootDir, sp.name, b.dataset.mode)));
+      els.summaryBody.appendChild(box);
+    }
     return;
   }
 
@@ -1282,7 +1301,7 @@ function appendVoucherRawLog(message) {
 }
 
 // Core voucher pipeline runner — called both from processImagesBtn and createSpeciesBtn
-async function runVoucherPipeline(rootDir, speciesName, mode, gbifRefs) {
+async function runVoucherPipeline(rootDir, speciesName, mode, keepOnFail) {
   openVoucherPanel(`Processing images — ${speciesName.replace(/_/g, " ")}`);
 
   window.api.offVoucherEvent();
@@ -1309,7 +1328,13 @@ async function runVoucherPipeline(rootDir, speciesName, mode, gbifRefs) {
         voucherClose.disabled     = false;
         voucherCancelBtn.disabled = true;
 
-        if (msg.cleanup) {
+        if (msg.cleanup && keepOnFail) {
+          // Images came from GBIF: keep the project so they are not lost; the user can retry from the species page
+          voucherTitle.textContent  = "Transcription failed";
+          voucherStatus.textContent = "No specimens were transcribed. The images were kept — open the species to try again.";
+          voucherThenSumBtn.classList.add("hidden");
+          window.api.refreshSpecies(rootDir, speciesName).catch(() => {});
+        } else if (msg.cleanup) {
           // Nothing transcribed — delete the species from DB and disk
           voucherTitle.textContent  = "Transcription failed";
           voucherStatus.textContent = "No specimens were transcribed — removing species.";
@@ -1347,7 +1372,7 @@ async function runVoucherPipeline(rootDir, speciesName, mode, gbifRefs) {
     }
   });
 
-  const result = await window.api.runVoucherPipeline(rootDir, speciesName, mode, gbifRefs);
+  const result = await window.api.runVoucherPipeline(rootDir, speciesName, mode);
   if (result && result.error) {
     appendVoucherLog("error", result.error);
     voucherClose.disabled    = false;
@@ -1383,8 +1408,6 @@ function openNewSpeciesModal() {
   newSpeciesError.classList.add("hidden");
   newSpeciesStatus.textContent = "";
   selectedImages = [];
-  document.getElementById("gbif-refs").value = "";
-  document.getElementById("gbif-status").textContent = "";
   imageDropLabel.textContent = "Click to select images";
   imageDropCount.textContent = "";
   newSpeciesModal.classList.remove("hidden");
@@ -1416,19 +1439,6 @@ imageDropZone.addEventListener("click", async () => {
   imageDropZone.classList.add("has-images");
 });
 
-// Find herbarium specimens with images on GBIF for the typed species name
-document.getElementById("gbif-find-btn").addEventListener("click", async () => {
-  const name = newSpeciesNameInp.value.trim();
-  const st   = document.getElementById("gbif-status");
-  if (!name) { st.textContent = "Enter the species name first."; return; }
-  st.textContent = "Searching GBIF…";
-  const res = await window.api.gbifSearch(name, 20);
-  if (res.error) { st.textContent = res.error; return; }
-  if (!res.results.length) { st.textContent = "No specimens with images found."; return; }
-  document.getElementById("gbif-refs").value = res.results.map(r => r.id).join("\n");
-  st.textContent = `Found ${res.results.length} specimen(s) with images — delete any IDs you don't want.`;
-});
-
 // Create species
 createSpeciesBtn.addEventListener("click", async () => {
   newSpeciesError.classList.add("hidden");
@@ -1439,9 +1449,8 @@ createSpeciesBtn.addEventListener("click", async () => {
     newSpeciesError.classList.remove("hidden");
     return;
   }
-  const gbifRefs = (document.getElementById("gbif-refs").value || "").split(/[\s,]+/).filter(Boolean);
-  if (!selectedImages.length && !gbifRefs.length) {
-    newSpeciesError.textContent = "Please select at least one image or add GBIF specimens.";
+  if (!selectedImages.length) {
+    newSpeciesError.textContent = "Please select at least one image.";
     newSpeciesError.classList.remove("hidden");
     return;
   }
@@ -1483,7 +1492,7 @@ createSpeciesBtn.addEventListener("click", async () => {
 
   // Run VoucherVision directly — images are already in pics/, no re-picking needed
   const modeEl = document.querySelector('input[name="transcribe-mode"]:checked');
-  await runVoucherPipeline(result.rootDir, result.folderName, modeEl ? modeEl.value : "gemini", gbifRefs);
+  await runVoucherPipeline(result.rootDir, result.folderName, modeEl ? modeEl.value : "gemini");
 
   createSpeciesBtn.disabled = false;
 });

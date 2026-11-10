@@ -34,7 +34,9 @@ cd IRIS-Electron-Main
 npm install
 npm start
 ```
-> **After the first install, you only need to run `npm start` to launch the app.**
+
+No Python is needed — everything runs in Node/Electron. Textbook OCR (Tesseract) is built in and works offline for English.
+
 ## First-time Setup
 
 1. Launch the app and register an account
@@ -43,6 +45,10 @@ npm start
    - **Gemini API key**  get one at [aistudio.google.com](https://aistudio.google.com)
 3. Click Save
 
+
+### GBIF tab
+
+Click **GBIF** in the sidebar to browse gbif.org inside the app. Search and filter as usual, then either open a specimen and press **Add this specimen**, or press **Add from this search** (set how many, up to 500; press again for more). Selected specimens appear in the tray at the bottom; click × to remove one. Press **Create project…**, enter the species name (a name that already exists is not allowed), and IRIS downloads the images into a new project that appears in the species list. Transcription is **not** started automatically — open the species and choose *Transcribe labels (Gemini)* or *Transcribe text (OCR)* when you are ready.
 
 ### Adding a new species
 1. Click **+ New species** in the sidebar

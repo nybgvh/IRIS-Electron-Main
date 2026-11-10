@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' https://unpkg.com; img-src 'self' file: data: https://*.tile.openstreetmap.org; connect-src https://*.tile.openstreetmap.org https://unpkg.com" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' https://unpkg.com; img-src 'self' file: data: https: http:; frame-src https:; child-src https:; connect-src https://*.tile.openstreetmap.org https://unpkg.com" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IRIS</title>
     <link rel="stylesheet" href="style.css" />
@@ -98,6 +98,13 @@
             </svg>
             New species
           </button>
+          <button id="gbif-tab-btn" title="Browse GBIF herbarium specimens">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            GBIF
+          </button>
 
         </div>
 
@@ -129,6 +136,31 @@
           <p class="welcome-sub">Integrated Red List Inference from Specimens</p>
           <p>Set your output root folder in <strong>Settings</strong>, then click <strong>+ New species</strong> to upload herbarium images and begin processing.</p>
           <button class="cta-btn" id="welcome-open-btn">Open Settings</button>
+        </div>
+
+        <div id="gbif-panel" class="hidden">
+          <div id="gbif-toolbar">
+            <button id="gbif-back" class="action-btn" title="Back">‹</button>
+            <button id="gbif-fwd" class="action-btn" title="Forward">›</button>
+            <button id="gbif-home" class="action-btn" title="GBIF specimen gallery">Home</button>
+            <span id="gbif-hint">Search on GBIF, then add specimens to your selection.</span>
+            <button id="gbif-add" class="action-btn" disabled>＋ Add this specimen</button>
+            <span class="gbif-from">
+              <button id="gbif-add-search" class="action-btn" disabled>＋ Add from this search</button>
+              <input id="gbif-search-n" type="number" min="1" max="500" value="20" title="How many specimens (max 500)" />
+            </span>
+          </div>
+          <div id="gbif-webview-wrap"></div>
+          <div id="gbif-tray">
+            <div id="gbif-tray-head">
+              <strong id="gbif-count">0 selected</strong>
+              <span id="gbif-status"></span>
+              <span class="gbif-spacer"></span>
+              <button id="gbif-clear" class="action-btn" disabled>Clear</button>
+              <button id="gbif-create" class="cta-btn" disabled>Create project…</button>
+            </div>
+            <div id="gbif-strip"></div>
+          </div>
         </div>
 
         <div id="viewer" class="hidden">
@@ -186,6 +218,29 @@
       </div>
     </div>
 
+    <!-- GBIF: create project modal -->
+    <div id="gbif-project-modal" class="hidden">
+      <div class="modal-backdrop" id="gbif-project-backdrop"></div>
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>Create project from GBIF</h3>
+          <button class="modal-close" id="gbif-project-close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <label class="field-label">Species name</label>
+          <input id="gbif-project-name" type="text" autocomplete="off" />
+          <p class="field-hint" id="gbif-project-summary"></p>
+          <div id="gbif-project-error" class="hidden" style="margin-top:8px;background:rgba(176,104,104,0.15);border:1px solid #b06868;border-radius:4px;color:#d48888;font-size:12px;padding:8px 12px"></div>
+        </div>
+        <div class="modal-footer">
+          <span id="gbif-project-status" style="font-size:12px;color:var(--text-muted)"></span>
+          <button id="gbif-project-create" class="cta-btn">Create project</button>
+        </div>
+      </div>
+    </div>
+
     <!-- New species modal -->
     <div id="new-species-modal" class="hidden">
       <div class="modal-backdrop" id="new-species-backdrop"></div>
@@ -218,12 +273,6 @@
             </svg>
             <span id="image-drop-label">Click to select images</span>
             <small id="image-drop-count"></small>
-          </div>
-          <label class="field-label" style="margin-top:12px">Import from GBIF (optional)</label>
-          <textarea id="gbif-refs" rows="3" placeholder="GBIF occurrence IDs or URLs, one per line" style="width:100%;font-size:12px"></textarea>
-          <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
-            <button type="button" id="gbif-find-btn" class="cta-btn" style="padding:4px 10px;font-size:12px">Find on GBIF</button>
-            <span id="gbif-status" style="font-size:11px;color:var(--text-muted)"></span>
           </div>
           <div id="new-species-error" class="hidden" style="margin-top:8px;background:rgba(176,104,104,0.15);border:1px solid #b06868;border-radius:4px;color:#d48888;font-size:12px;padding:8px 12px"></div>
         </div>
@@ -376,5 +425,6 @@
     </div>
 
     <script src="renderer.js"></script>
+    <script src="gbif-tab.js"></script>
   </body>
 </html>

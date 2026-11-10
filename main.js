@@ -23,8 +23,9 @@ function createWindow() {
     backgroundColor: "#0f1a0f",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: process.platform === "darwin" ? { x: 14, y: 20 } : undefined,
-    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, webviewTag: true },
   });
+  require("./gbif-capture").setup(mainWindow);
   mainWindow.loadFile("index.html");
   if (process.platform === "darwin") {
     mainWindow.webContents.on("did-finish-load", () => {
@@ -293,8 +294,18 @@ ipcMain.handle("delete-species", async (_e, rootDir, speciesName) => {
   try {
     const user       = requireUser();
     const speciesDir = path.join(rootDir, speciesName);
+    // Delete the folder FIRST (retrying briefly if Windows still has a file open); only then drop the DB row,
+    // so a failed delete never leaves a folder that the app has forgotten about.
+    if (fs.existsSync(speciesDir)) {
+      try { fs.rmSync(speciesDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 300 }); }
+      catch (err) {
+        const locked = /EPERM|EBUSY|EACCES|ENOTEMPTY/.test(String(err.code || err.message));
+        return { error: locked
+          ? `Could not delete the folder because something is using its files. Close File Explorer / Finder windows or image viewers showing it, pause OneDrive syncing for it if applicable, and try again. (${err.code || err.message}: ${err.path || speciesDir})`
+          : err.message };
+      }
+    }
     db.deleteSpecies(user.id, speciesName, rootDir);
-    if (fs.existsSync(speciesDir)) fs.rmSync(speciesDir, { recursive: true, force: true });
     return { ok: true };
   } catch (err) {
     return { error: err.message };
@@ -458,21 +469,13 @@ ipcMain.handle("cancel-pipeline", () => {
 });
 
 // ── IPC: run-voucher-pipeline (transcription: Gemini or Tesseract) ────────────
-ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName, mode, gbifRefs) => {
+ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName, mode) => {
   const settings = loadSettings();
   const isOcr = mode === "ocr";
   if (!isOcr && !settings.geminiApiKey) return { error: "No Gemini API key set. Add it in Settings." };
   if (abortCtl) return { error: "A pipeline is already running." };
   abortCtl = new AbortController();
   try {
-    if (gbifRefs && gbifRefs.length) {
-      send("voucher-event", { event: "progress", status: "start", message: `Importing ${gbifRefs.length} specimen image(s) from GBIF…` });
-      const r = await gbif.importOccurrences(path.join(rootDir, speciesName), gbifRefs,
-        (m) => send("voucher-event", { event: "progress", ...m }), abortCtl.signal);
-      send("voucher-event", { event: "progress", status: "processing",
-        message: `GBIF: ${r.imported} imported${r.skipped ? `, ${r.skipped} already present` : ""}${r.failed ? `, ${r.failed} failed` : ""}` });
-    }
-    if (abortCtl.signal.aborted) throw new Error("Cancelled");
     await pipelines.runTranscription({
       speciesDir: path.join(rootDir, speciesName), apiKey: settings.geminiApiKey, mode,
       signal: abortCtl.signal, emit: (msg) => send("voucher-event", msg),
@@ -486,17 +489,17 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName, mode, gb
   return { ok: true, code: 0 };
 });
 
-// ── IPC: GBIF ─────────────────────────────────────────────────────────────────
-ipcMain.handle("gbif-search", async (_e, name, limit) => {
-  try { return { results: await gbif.searchBySpecies(name, limit || 20) }; }
-  catch (err) { return { error: `GBIF search failed: ${err.message}` }; }
+// ── IPC: GBIF tab ─────────────────────────────────────────────────────────────
+ipcMain.handle("gbif-lookup", async (_e, ref) => {
+  try { return { occurrence: await gbif.lookup(ref) }; } catch (err) { return { error: err.message }; }
 });
-ipcMain.handle("gbif-import", async (_e, rootDir, speciesName, refs) => {
-  try {
-    const res = await gbif.importOccurrences(path.join(rootDir, speciesName), refs || [],
-      (m) => send("voucher-event", { event: "progress", ...m }));
-    return res;
-  } catch (err) { return { error: `GBIF import failed: ${err.message}` }; }
+ipcMain.handle("gbif-enumerate", async (_e, url, max) => {
+  try { return await gbif.enumerateSearch(url, max); } catch (err) { return { error: err.message }; }
+});
+ipcMain.handle("gbif-capture", (_e, on) => { require("./gbif-capture").setCapturing(on); return true; });
+ipcMain.handle("gbif-save-image", async (_e, rootDir, speciesName, id, dataUrl) => {
+  try { requireUser(); return { ok: true, ...(await gbif.saveImage(path.join(rootDir, speciesName), id, dataUrl)) }; }
+  catch (err) { return { error: err.message }; }
 });
 
 ipcMain.handle("voucher-open-run-log", () => {

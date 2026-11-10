@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld("api", {
   copyImagesToPics:   (r,s,ps)  => ipcRenderer.invoke("copy-images-to-pics", r, s, ps),
 
   // Voucher pipeline (runs local VoucherVision, vendored in the app)
-  runVoucherPipeline: (r,s,m,g) => ipcRenderer.invoke("run-voucher-pipeline", r, s, m, g),
+  runVoucherPipeline: (r,s,m)   => ipcRenderer.invoke("run-voucher-pipeline", r, s, m),
   onVoucherEvent:     (cb)      => ipcRenderer.on("voucher-event", (_e,msg) => cb(msg)),
   offVoucherEvent:    ()        => ipcRenderer.removeAllListeners("voucher-event"),
   voucherOpenRunLog:  ()        => ipcRenderer.invoke("voucher-open-run-log"),
@@ -40,8 +40,11 @@ contextBridge.exposeInMainWorld("api", {
   // Local VoucherVision environment setup
 
   // Red list pipeline
-  gbifSearch:         (n,l)     => ipcRenderer.invoke("gbif-search", n, l),
-  gbifImport:         (r,s,refs)=> ipcRenderer.invoke("gbif-import", r, s, refs),
+  gbifLookup:         (ref)     => ipcRenderer.invoke("gbif-lookup", ref),
+  gbifEnumerate:      (url,n)   => ipcRenderer.invoke("gbif-enumerate", url, n),
+  gbifCapture:        (on)      => ipcRenderer.invoke("gbif-capture", on),
+  gbifSaveImage:      (r,s,id,d)=> ipcRenderer.invoke("gbif-save-image", r, s, id, d),
+  onGbifDownload:     (cb)      => ipcRenderer.on("gbif:download", (_e,d) => cb(d)),
   runPipeline:        (r,s,lang) => ipcRenderer.invoke("run-pipeline", r, s, lang),
   cancelPipeline:     ()        => ipcRenderer.invoke("cancel-pipeline"),
   onPipelineEvent:    (cb)      => ipcRenderer.on("pipeline-event", (_e,msg) => cb(msg)),

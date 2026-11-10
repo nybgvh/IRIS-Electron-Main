@@ -157,11 +157,12 @@ function cleanJsonText(t) {
 // Convert any supported image to a JPEG buffer, downscaled to ~16 MP. Throws if unreadable.
 async function toJpegBuffer(file) {
   const sharp = require("sharp");
+  sharp.cache(false); // don't keep image files open (on Windows an open file blocks deleting the folder)
   const ext = path.extname(file).toLowerCase();
   if (ext === ".heic" || ext === ".heif") {
     throw new Error("HEIC/HEIF is not supported — convert to JPG or PNG first.");
   }
-  const img = sharp(file, { limitInputPixels: false }).rotate();
+  const img = sharp(fs.readFileSync(file), { limitInputPixels: false }).rotate(); // read into memory: no open file handle
   let meta;
   try { meta = await img.metadata(); }
   catch (_) { throw new Error("could not read this file — it is unsupported or corrupt."); }

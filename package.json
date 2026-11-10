@@ -22,6 +22,8 @@
       "database.js",
       "pipelines.js",
       "gbif.js",
+      "gbif-capture.js",
+      "gbif-tab.js",
       "node_modules/**/*"
     ],
     "win": {
