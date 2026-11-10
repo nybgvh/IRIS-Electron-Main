@@ -328,15 +328,7 @@ ipcMain.handle("set-api-key",       (_e, v) => { const s=loadSettings(); s.gemin
 
 ipcMain.handle("copy-images-to-pics", async (_e, rootDir, speciesName, imagePaths) => {
   try {
-    const picsDir = path.join(rootDir, speciesName, "pics");
-    if (!fs.existsSync(picsDir)) fs.mkdirSync(picsDir, { recursive: true });
-
-    const copied = [];
-    for (const src of imagePaths) {
-      const dest = path.join(picsDir, path.basename(src));
-      fs.copyFileSync(src, dest);
-      copied.push(path.basename(src));
-    }
+    const copied = await addFilesToPics(imagePaths, path.join(rootDir, speciesName, "pics"), (p) => send("pdf-progress", p));
     return { ok: true, copied };
   } catch (err) {
     return { error: err.message };
@@ -346,9 +338,9 @@ ipcMain.handle("copy-images-to-pics", async (_e, rootDir, speciesName, imagePath
 // ── IPC: pick-images ──────────────────────────────────────────────────────────
 ipcMain.handle("pick-images", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: "Select herbarium specimen images",
+    title: "Select images or PDFs",
     properties: ["openFile", "multiSelections"],
-    filters: [{ name: "Images", extensions: ["jpg","jpeg","png","webp","tif","tiff","jfif","bmp","heic","heif","jp2"] }],
+    filters: [{ name: "Images and PDFs", extensions: ["jpg","jpeg","png","webp","tif","tiff","jfif","bmp","heic","heif","jp2","pdf"] }],
   });
   return result.canceled ? [] : result.filePaths;
 });
@@ -390,6 +382,21 @@ ipcMain.handle("load-output-root", async () => {
   } catch (err) { return { error: err.message }; }
 });
 
+// Copy chosen files into a species' pics folder. PDFs are converted into one JPG per page.
+async function addFilesToPics(srcs, picsDir, onProgress) {
+  fs.mkdirSync(picsDir, { recursive: true });
+  const added = [];
+  for (const src of srcs) {
+    if (path.extname(src).toLowerCase() === ".pdf") {
+      added.push(...await require("./pdf-pages").pdfToJpgs(src, picsDir, onProgress));
+    } else {
+      fs.copyFileSync(src, path.join(picsDir, path.basename(src)));
+      added.push(path.basename(src));
+    }
+  }
+  return added;
+}
+
 // ── IPC: create-species ───────────────────────────────────────────────────────
 ipcMain.handle("create-species", async (_e, speciesName, imagePaths) => {
   try {
@@ -408,10 +415,11 @@ ipcMain.handle("create-species", async (_e, speciesName, imagePaths) => {
     }
 
     const picsDir = path.join(speciesDir, "pics");
-    fs.mkdirSync(picsDir, { recursive: true });
-
-    for (const src of imagePaths) {
-      fs.copyFileSync(src, path.join(picsDir, path.basename(src)));
+    try {
+      await addFilesToPics(imagePaths, picsDir, (p) => send("pdf-progress", p));
+    } catch (err) {
+      try { fs.rmSync(speciesDir, { recursive: true, force: true }); } catch (_) {} // don't leave a half-made species
+      return { error: err.message };
     }
 
     const row = db.upsertSpecies({

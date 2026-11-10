@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Images
   pickImages:         ()        => ipcRenderer.invoke("pick-images"),
+  onPdfProgress:      (cb)      => ipcRenderer.on("pdf-progress", (_e,d) => cb(d)),
   copyImagesToPics:   (r,s,ps)  => ipcRenderer.invoke("copy-images-to-pics", r, s, ps),
 
   // Voucher pipeline (runs local VoucherVision, vendored in the app)

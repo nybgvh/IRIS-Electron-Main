@@ -21,6 +21,7 @@
       "style.css",
       "database.js",
       "pipelines.js",
+      "pdf-pages.js",
       "gbif.js",
       "gbif-capture.js",
       "gbif-tab.js",
@@ -61,7 +62,10 @@
       "node_modules/tesseract.js-core/**",
       "node_modules/sharp/**",
       "node_modules/@img/**",
-      "node_modules/@tesseract.js-data/**"
+      "node_modules/@tesseract.js-data/**",
+      "node_modules/pdf-to-img/**",
+      "node_modules/pdfjs-dist/**",
+      "node_modules/@napi-rs/**"
     ]
   },
   "devDependencies": {
@@ -72,8 +76,12 @@
     "@google/genai": "^3.0.0",
     "@tesseract.js-data/eng": "^1.0.0",
     "bcryptjs": "^3.0.3",
+    "pdf-to-img": "^7.0.2",
     "sharp": "^0.35.5",
     "sql.js": "^1.12.0",
     "tesseract.js": "^7.0.0"
+  },
+  "overrides": {
+    "wasm-feature-detect": "1.8.0"
   }
 }

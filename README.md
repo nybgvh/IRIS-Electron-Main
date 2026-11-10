@@ -48,7 +48,7 @@ No Python is needed — everything runs in Node/Electron. Textbook OCR (Tesserac
 
 ### GBIF tab
 
-Click **GBIF** in the sidebar to browse gbif.org inside the app. Search and filter as usual, then either open a specimen and press **Add this specimen**, or press **Add from this search** (set how many, up to 500; press again for more). Selected specimens appear in the tray at the bottom; click × to remove one. Press **Create project…**, enter the species name (a name that already exists is not allowed), and IRIS downloads the images into a new project that appears in the species list. Transcription is **not** started automatically — open the species and choose *Transcribe labels (Gemini)* or *Transcribe text (OCR)* when you are ready.
+Click **GBIF** in the sidebar to browse gbif.org inside the app. Search and filter as usual, then either open a specimen and press **Add this specimen**, or press **Add from this search** (set how many, up to 500; press again for more). Selected specimens appear in the tray at the bottom; click × to remove one. Press **Create project…**, enter the species name (a name that already exists is not allowed), and IRIS downloads the images into a new project that appears in the species list. Label transcription with Gemini then starts automatically. If it fails, the downloaded images are kept, and you can retry from the species page with *Transcribe labels (Gemini)*.
 
 ### Adding a new species
 1. Click **+ New species** in the sidebar

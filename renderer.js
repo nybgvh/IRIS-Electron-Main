@@ -1408,7 +1408,7 @@ function openNewSpeciesModal() {
   newSpeciesError.classList.add("hidden");
   newSpeciesStatus.textContent = "";
   selectedImages = [];
-  imageDropLabel.textContent = "Click to select images";
+  imageDropLabel.textContent = "Click to select images or PDFs";
   imageDropCount.textContent = "";
   newSpeciesModal.classList.remove("hidden");
   setTimeout(() => newSpeciesNameInp.focus(), 50);
@@ -1439,6 +1439,8 @@ imageDropZone.addEventListener("click", async () => {
   imageDropZone.classList.add("has-images");
 });
 
+window.api.onPdfProgress((p) => { newSpeciesStatus.textContent = `Converting ${p.file}: page ${p.done} of ${p.total}…`; });
+
 // Create species
 createSpeciesBtn.addEventListener("click", async () => {
   newSpeciesError.classList.add("hidden");
@@ -1456,7 +1458,7 @@ createSpeciesBtn.addEventListener("click", async () => {
   }
 
   createSpeciesBtn.disabled    = true;
-  newSpeciesStatus.textContent = "Creating folder and copying images…";
+  newSpeciesStatus.textContent = "Creating folder and copying images… (PDFs are converted to page images, which can take a while)";
 
   const result = await window.api.createSpecies(name, selectedImages);
 
