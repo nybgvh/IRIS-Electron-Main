@@ -1,74 +1,12 @@
 // ── Auth ──────────────────────────────────────────────────
 const authScreen   = document.getElementById("auth-screen");
-const authError    = document.getElementById("auth-error");
 const authTabs     = document.querySelectorAll(".auth-tab");
-const tabLogin     = document.getElementById("tab-login");
-const tabRegister  = document.getElementById("tab-register");
 
-function showAuthError(msg) {
-  authError.textContent = msg;
-  authError.classList.remove("hidden");
-}
-function clearAuthError() { authError.classList.add("hidden"); }
-
-authTabs.forEach(tab => {
-  tab.addEventListener("click", () => {
-    authTabs.forEach(t => t.classList.remove("active"));
-    tab.classList.add("active");
-    clearAuthError();
-    if (tab.dataset.tab === "login") {
-      tabLogin.classList.remove("hidden");
-      tabRegister.classList.add("hidden");
-    } else {
-      tabLogin.classList.add("hidden");
-      tabRegister.classList.remove("hidden");
-    }
-  });
-});
-
-document.getElementById("login-btn").addEventListener("click", async () => {
-  clearAuthError();
-  const u = document.getElementById("login-username").value.trim();
-  const p = document.getElementById("login-password").value;
-  const result = await window.api.login(u, p);
-  if (result.error) { showAuthError(result.error); return; }
-  onLoggedIn(result.user);
-});
-
-["login-username", "login-password"].forEach(id => {
-  document.getElementById(id).addEventListener("keydown", e => {
-    if (e.key === "Enter") document.getElementById("login-btn").click();
-  });
-});
-
-// TEMP (dev testing): click the hint to fill + submit the dev credentials.
-// Remove this block, #dev-login-hint (index.html) and seedDevAccount (main.js) before release.
-document.getElementById("dev-login-hint")?.addEventListener("click", () => {
-  document.getElementById("login-username").value = "dev";
-  document.getElementById("login-password").value = "devpass123";
-  document.getElementById("login-btn").click();
-});
-
-document.getElementById("register-btn").addEventListener("click", async () => {
-  clearAuthError();
-  const u  = document.getElementById("reg-username").value.trim();
-  const p  = document.getElementById("reg-password").value;
-  const p2 = document.getElementById("reg-confirm").value;
-  if (p !== p2) { showAuthError("Passwords do not match."); return; }
-  const result = await window.api.register(u, p);
-  if (result.error) { showAuthError(result.error); return; }
-  onLoggedIn(result.user);
-});
-
-["reg-username", "reg-password", "reg-confirm"].forEach(id => {
-  document.getElementById(id).addEventListener("keydown", e => {
-    if (e.key === "Enter") document.getElementById("register-btn").click();
-  });
-});
+const { clearAuthError } = window.IrisAuth.init(onLoggedIn);
 
 function onLoggedIn(user) {
   authScreen.classList.add("hidden");
-  document.getElementById("user-badge").textContent = user.username;
+  document.getElementById("user-badge").textContent = user.email;
   autoLoadLastFolder();
 }
 
@@ -139,7 +77,8 @@ function showFolderPicker(folders) {
 }
 
 document.getElementById("logout-btn").addEventListener("click", async () => {
-  await window.api.logout();
+  const result = await window.api.logout();
+  if (result.error) { alert(result.error); return; }
   state.rootDir = null; state.species = []; state.filtered = [];
   state.active = null; state.summaryText = null;
   state.picsMap = {}; state.specimens = [];

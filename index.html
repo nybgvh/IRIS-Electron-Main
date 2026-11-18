@@ -26,28 +26,32 @@
           <button class="auth-tab" data-tab="register">Register</button>
         </div>
 
-        <div id="auth-error" class="hidden"></div>
+        <div id="auth-error" class="hidden" role="status" aria-live="polite"></div>
 
         <div id="tab-login" class="auth-panel">
-          <label class="field-label">Username</label>
-          <input id="login-username" type="text" placeholder="Enter username" autocomplete="username" />
+          <label class="field-label">Email</label>
+          <input id="login-username" type="email" placeholder="Enter email" autocomplete="username" />
           <label class="field-label">Password</label>
           <input id="login-password" type="password" placeholder="Enter password" autocomplete="current-password" />
           <button class="auth-submit-btn" id="login-btn">Sign in</button>
-          <!-- TEMP: dev login hint — remove before release (see seedDevAccount in main.js) -->
-          <button type="button" id="dev-login-hint" title="Click to fill the dev test credentials">
-            🔧 Dev login — user: <code>dev</code> · pass: <code>devpass123</code>
-          </button>
+          <button type="button" class="auth-submit-btn" id="reset-password-btn">Forgot password?</button>
         </div>
 
         <div id="tab-register" class="auth-panel hidden">
-          <label class="field-label">Username</label>
-          <input id="reg-username" type="text" placeholder="Choose a username" autocomplete="username" />
+          <label class="field-label">Email</label>
+          <input id="reg-username" type="email" placeholder="Enter email" autocomplete="username" />
           <label class="field-label">Password</label>
-          <input id="reg-password" type="password" placeholder="At least 6 characters" autocomplete="new-password" />
+          <input id="reg-password" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
           <label class="field-label">Confirm password</label>
           <input id="reg-confirm" type="password" placeholder="Repeat password" autocomplete="new-password" />
           <button class="auth-submit-btn" id="register-btn">Create account</button>
+        </div>
+        <div id="tab-verification" class="auth-panel hidden">
+          <p class="field-label">Verify your email</p>
+          <p class="field-hint">Open the verification link sent to <strong id="verification-email"></strong>, then return here.</p>
+          <button type="button" class="auth-submit-btn" id="check-verification-btn">I've verified my email</button>
+          <button type="button" class="auth-submit-btn" id="resend-verification-btn">Resend email</button>
+          <button type="button" class="auth-submit-btn" id="verification-back-btn">Back to sign in</button>
         </div>
       </div>
     </div>
@@ -390,6 +394,7 @@
       </div>
     </div>
 
+    <script src="auth-renderer.js"></script>
     <script src="renderer.js"></script>
   </body>
 </html>

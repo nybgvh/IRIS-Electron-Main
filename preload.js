@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld("api", {
   register:        (u, p)   => ipcRenderer.invoke("auth-register", u, p),
   login:           (u, p)   => ipcRenderer.invoke("auth-login", u, p),
   logout:          ()        => ipcRenderer.invoke("auth-logout"),
+  resetPassword:   (email)   => ipcRenderer.invoke("auth-reset-password", email),
+  resendVerification: ()    => ipcRenderer.invoke("auth-resend-verification"),
+  checkVerification:  ()    => ipcRenderer.invoke("auth-check-verification"),
   currentUser:     ()        => ipcRenderer.invoke("auth-current"),
 
   // Folder & species

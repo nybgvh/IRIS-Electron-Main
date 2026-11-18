@@ -4,7 +4,6 @@
 
 const path    = require("path");
 const fs      = require("fs");
-const bcrypt  = require("bcryptjs");
 
 let db     = null;
 let dbPath = null;
@@ -15,6 +14,13 @@ const SCHEMA = `
     username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     created_at    TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS firebase_profiles (
+    project_id   TEXT NOT NULL,
+    firebase_uid TEXT NOT NULL,
+    user_id      INTEGER NOT NULL UNIQUE REFERENCES users(id),
+    PRIMARY KEY (project_id, firebase_uid)
   );
 
   CREATE TABLE IF NOT EXISTS species (
@@ -158,19 +164,25 @@ function all(sql, p = []) {
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
-function createUser(username, password) {
-  const existing = get("SELECT id FROM users WHERE username=?", [username]);
-  if (existing) return { error: "Username already taken." };
-  const hash = bcrypt.hashSync(password, 10);
-  run("INSERT INTO users (username, password_hash) VALUES (?,?)", [username, hash]);
-  return get("SELECT id, username, created_at FROM users WHERE username=?", [username]);
-}
+function getFirebaseProfile(projectId, firebaseUser) {
+  const existing = get("SELECT user_id FROM firebase_profiles WHERE project_id=? AND firebase_uid=?", [projectId, firebaseUser.uid]);
+  if (existing) return getUser(existing.user_id);
 
-function loginUser(username, password) {
-  const user = get("SELECT * FROM users WHERE username=?", [username]);
-  if (!user) return { error: "User not found." };
-  if (!bcrypt.compareSync(password, user.password_hash)) return { error: "Incorrect password." };
-  return { id: user.id, username: user.username, created_at: user.created_at };
+  // Keep numeric IDs so existing species and GBIF queries stay unchanged.
+  db.run("BEGIN TRANSACTION");
+  try {
+    db.run("INSERT INTO users (username, password_hash) VALUES (?,?)", [
+      `firebase:${projectId}:${firebaseUser.uid}`, "!firebase-managed",
+    ]);
+    const id = get("SELECT last_insert_rowid() AS id").id;
+    db.run("INSERT INTO firebase_profiles (project_id, firebase_uid, user_id) VALUES (?,?,?)", [projectId, firebaseUser.uid, id]);
+    db.run("COMMIT");
+    persist();
+    return getUser(id);
+  } catch (err) {
+    db.run("ROLLBACK");
+    throw err;
+  }
 }
 
 function getUser(id) {
@@ -383,7 +395,7 @@ function removeGbifBookmark(userId, id) {
 
 module.exports = {
   init,
-  createUser, loginUser, getUser,
+  getFirebaseProfile, getUser,
   getLastFolder, getUserFolders,
   upsertSpecies, getAllSpecies, getSpeciesByName, updateSummary, getSummary,
   upsertSpecimens, getSpecimens,

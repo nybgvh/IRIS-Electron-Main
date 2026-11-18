@@ -4,7 +4,7 @@
   "description": "IRIS — IUCN Red List Information System",
   "main": "main.js",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.12.0"
   },
   "scripts": {
     "start": "electron .",
@@ -14,7 +14,8 @@
     "electron": "^42.5.0"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.10",
+    "firebase": "^13.3.0",
     "sql.js": "^1.12.0"
   }
 }

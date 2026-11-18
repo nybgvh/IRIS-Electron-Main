@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
 const fs   = require("fs");
+require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
+const auth = require("./auth-service");
 const { spawn, spawnSync } = require("child_process");
 const db   = require("./database");
 const gbifService  = require("./gbif-service");
@@ -343,18 +345,8 @@ function createWindow() {
   gbifCapture.setup(mainWindow); // silent capture of attachment-style GBIF images
 }
 
-// TEMP (dev testing): ensure a known account exists so the dev-login hint in the
-// UI works out of the box. Remove this and the #dev-login-hint element before release.
-function seedDevAccount() {
-  try {
-    const res = db.createUser("dev", "devpass123");
-    if (res && !res.error) console.log("[DEV] seeded test account dev / devpass123");
-  } catch (_) { /* already exists — fine */ }
-}
-
 app.whenReady().then(async () => {
   await db.init(app.getPath("userData"));
-  seedDevAccount();
   ensureSettingsDefaults();
   createWindow();
 });
@@ -362,31 +354,88 @@ app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(
 app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
 // ── Auth IPC ──────────────────────────────────────────────────────────────────
-ipcMain.handle("auth-register", (_e, username, password) => {
-  if (!username || username.trim().length < 2) return { error: "Username must be at least 2 characters." };
-  if (!password || password.length < 6)        return { error: "Password must be at least 6 characters." };
-  const result = db.createUser(username.trim(), password);
-  if (result.error) return result;
-  currentUser = { id: result.id, username: result.username };
-  return { ok: true, user: currentUser };
-});
+function isAppSender(event) {
+  return mainWindow && event.sender === mainWindow.webContents && event.senderFrame === mainWindow.webContents.mainFrame;
+}
 
-ipcMain.handle("auth-login", (_e, username, password) => {
-  if (!username || !password) return { error: "Please enter username and password." };
-  const result = db.loginUser(username.trim(), password);
-  if (result.error) return result;
-  currentUser = { id: result.id, username: result.username };
-  return { ok: true, user: currentUser };
-});
+function handleApp(channel, action) {
+  ipcMain.handle(channel, async (event, ...args) => {
+    if (!isAppSender(event)) return { error: "Application request denied." };
+    try {
+      requireUser();
+      return await action(event, ...args);
+    } catch (err) { return { error: err.message }; }
+  });
+}
 
-ipcMain.handle("auth-logout", () => {
+let authBusy = false;
+function authHandler(action) {
+  return async (event, ...args) => {
+    // Reject requests from embedded pages and child frames.
+    if (!isAppSender(event)) {
+      return { error: "Authentication request denied." };
+    }
+    if (authBusy) return { error: "Please wait for the current request." };
+    authBusy = true;
+    try { return await action(...args); }
+    catch (err) { return { error: auth.errorMessage(err) }; }
+    finally { authBusy = false; }
+  };
+}
+
+function verificationRequired(user, message) {
+  return { ok: true, verificationRequired: true, email: user.email, message };
+}
+
+async function completeSignIn(user) {
+  // Firebase authentication alone does not grant access to IRIS.
+  if (!user.emailVerified) return verificationRequired(user, "Verify your email before continuing.");
+  try {
+    const profile = db.getFirebaseProfile(auth.projectId(), user);
+    currentUser = { id: profile.id, uid: user.uid, email: user.email, username: user.email, emailVerified: true };
+    return { ok: true, user: currentUser };
+  } catch (err) {
+    await auth.logout();
+    throw err;
+  }
+}
+
+async function authenticate(method, email, password) {
+  if (currentUser) return { error: "Sign out before switching accounts." };
+  const user = await auth[method](email, password);
+  if (user.emailVerified) return completeSignIn(user);
+  const prefix = method === "register" ? "Account created. " : "";
+  try {
+    await auth.sendVerification();
+    return verificationRequired(user, prefix + "Verification email requested. Check your inbox and spam folder, then verify below.");
+  } catch (err) {
+    return verificationRequired(user, prefix + "Your email is not verified. " + auth.errorMessage(err));
+  }
+}
+
+ipcMain.handle("auth-register", authHandler((email, password) => authenticate("register", email, password)));
+ipcMain.handle("auth-login", authHandler((email, password) => authenticate("login", email, password)));
+ipcMain.handle("auth-check-verification", authHandler(async () => {
+  if (currentUser) return { ok: true, user: currentUser };
+  return completeSignIn(await auth.checkVerification());
+}));
+ipcMain.handle("auth-resend-verification", authHandler(async () => {
+  if (currentUser) return { error: "Your email is already verified." };
+  await auth.sendVerification();
+  return verificationRequired(auth.pendingUser(), "Verification email requested. Check your inbox and spam folder.");
+}));
+ipcMain.handle("auth-reset-password", authHandler(async email => {
+  await auth.resetPassword(email);
+  return { ok: true };
+}));
+ipcMain.handle("auth-logout", authHandler(async () => {
+  if (activeRun) return { error: "Stop the running pipeline before signing out." };
+  await auth.logout();
   currentUser = null;
   return { ok: true };
-});
+}));
+ipcMain.handle("auth-current", authHandler(() => currentUser));
 
-ipcMain.handle("auth-current", () => currentUser);
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const IMG_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"];
 
 function scanPics(rootDir, speciesName) {
@@ -431,12 +480,12 @@ function scanSpecimens(rootDir, speciesName) {
 }
 
 function requireUser() {
-  if (!currentUser) throw new Error("Not logged in.");
+  if (!currentUser || !currentUser.emailVerified) throw new Error("Sign in with a verified email to continue.");
   return currentUser;
 }
 
 // ── IPC: get-last-folder ──────────────────────────────────────────────────────
-ipcMain.handle("get-last-folder", () => {
+handleApp("get-last-folder", () => {
   try {
     const user = requireUser();
     return {
@@ -448,7 +497,7 @@ ipcMain.handle("get-last-folder", () => {
 
 // ── IPC: load-folder-from-db ──────────────────────────────────────────────────
 // Returns species list from DB without touching the filesystem
-ipcMain.handle("load-folder-from-db", (_e, rootDir) => {
+handleApp("load-folder-from-db", (_e, rootDir) => {
   try {
     const user    = requireUser();
     const rows    = db.getAllSpecies(user.id, rootDir);
@@ -463,7 +512,7 @@ ipcMain.handle("load-folder-from-db", (_e, rootDir) => {
 });
 
 // ── IPC: pick-folder ──────────────────────────────────────────────────────────
-ipcMain.handle("pick-folder", async () => {
+handleApp("pick-folder", async () => {
   const user = requireUser();
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"], title: "Select IRIS Output Folder",
@@ -501,7 +550,7 @@ ipcMain.handle("pick-folder", async () => {
 });
 
 // ── IPC: read-summary ─────────────────────────────────────────────────────────
-ipcMain.handle("read-summary", async (_e, rootDir, speciesName) => {
+handleApp("read-summary", async (_e, rootDir, speciesName) => {
   try {
     const user   = requireUser();
     const cached = db.getSummary(user.id, speciesName, rootDir);
@@ -528,7 +577,7 @@ ipcMain.handle("read-summary", async (_e, rootDir, speciesName) => {
 });
 
 // ── IPC: read-specimens ───────────────────────────────────────────────────────
-ipcMain.handle("read-specimens", async (_e, rootDir, speciesName) => {
+handleApp("read-specimens", async (_e, rootDir, speciesName) => {
   try {
     const user = requireUser();
     const row  = db.getSpeciesByName(user.id, speciesName, rootDir);
@@ -546,7 +595,7 @@ ipcMain.handle("read-specimens", async (_e, rootDir, speciesName) => {
 });
 
 // ── IPC: resolve-pics ─────────────────────────────────────────────────────────
-ipcMain.handle("resolve-pics", async (_e, rootDir, speciesName) => {
+handleApp("resolve-pics", async (_e, rootDir, speciesName) => {
   try {
     const user = requireUser();
     const row  = db.getSpeciesByName(user.id, speciesName, rootDir);
@@ -556,7 +605,7 @@ ipcMain.handle("resolve-pics", async (_e, rootDir, speciesName) => {
 });
 
 // ── IPC: refresh-species ──────────────────────────────────────────────────────
-ipcMain.handle("refresh-species", async (_e, rootDir, speciesName) => {
+handleApp("refresh-species", async (_e, rootDir, speciesName) => {
   try {
     const user        = requireUser();
     const dirPath     = path.join(rootDir, speciesName);
@@ -588,7 +637,7 @@ ipcMain.handle("refresh-species", async (_e, rootDir, speciesName) => {
 
 // ── IPC: api-key (shared) ─────────────────────────────────────────────────────
 // ── IPC: delete-species ───────────────────────────────────────────────────────
-ipcMain.handle("delete-species", async (_e, rootDir, speciesName) => {
+handleApp("delete-species", async (_e, rootDir, speciesName) => {
   try {
     const user       = requireUser();
     const speciesDir = path.join(rootDir, speciesName);
@@ -600,30 +649,30 @@ ipcMain.handle("delete-species", async (_e, rootDir, speciesName) => {
   }
 });
 
-ipcMain.handle("get-output-root",    () => loadSettings().outputRoot || "");
-ipcMain.handle("set-output-root",    (_e, v) => { const s=loadSettings(); s.outputRoot=v; saveSettings(s); return true; });
-ipcMain.handle("get-api-key",       () => loadSettings().geminiApiKey   || "");
-ipcMain.handle("get-auth-token",    () => loadSettings().authToken       || "");
-ipcMain.handle("set-api-key",       (_e, v) => { const s=loadSettings(); s.geminiApiKey  =v; saveSettings(s); return true; });
-ipcMain.handle("set-auth-token",    (_e, v) => { const s=loadSettings(); s.authToken      =v; saveSettings(s); return true; });
+handleApp("get-output-root",    () => loadSettings().outputRoot || "");
+handleApp("set-output-root",    (_e, v) => { const s=loadSettings(); s.outputRoot=v; saveSettings(s); return true; });
+handleApp("get-api-key",       () => loadSettings().geminiApiKey   || "");
+handleApp("get-auth-token",    () => loadSettings().authToken       || "");
+handleApp("set-api-key",       (_e, v) => { const s=loadSettings(); s.geminiApiKey  =v; saveSettings(s); return true; });
+handleApp("set-auth-token",    (_e, v) => { const s=loadSettings(); s.authToken      =v; saveSettings(s); return true; });
 
 // VoucherVision + Red List option blocks (defaults merged so the UI always has
 // a full set of fields to show/edit).
-ipcMain.handle("get-vv-settings",      () => ({ ...VV_DEFAULTS, ...(loadSettings().vouchervision || {}) }));
-ipcMain.handle("set-vv-settings",      (_e, partial) => {
+handleApp("get-vv-settings",      () => ({ ...VV_DEFAULTS, ...(loadSettings().vouchervision || {}) }));
+handleApp("set-vv-settings",      (_e, partial) => {
   const s = loadSettings();
   s.vouchervision = { ...VV_DEFAULTS, ...(s.vouchervision || {}), ...(partial || {}) };
   saveSettings(s); return true;
 });
-ipcMain.handle("get-redlist-settings", () => ({ ...REDLIST_DEFAULTS, ...(loadSettings().redlist || {}) }));
-ipcMain.handle("set-redlist-settings", (_e, partial) => {
+handleApp("get-redlist-settings", () => ({ ...REDLIST_DEFAULTS, ...(loadSettings().redlist || {}) }));
+handleApp("set-redlist-settings", (_e, partial) => {
   const s = loadSettings();
   s.redlist = { ...REDLIST_DEFAULTS, ...(s.redlist || {}), ...(partial || {}) };
   saveSettings(s); return true;
 });
 
 // ── IPC: browse-for-folder (generic folder picker, no auth required) ──────────
-ipcMain.handle("browse-for-folder", async () => {
+handleApp("browse-for-folder", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"], title: "Select folder",
   });
@@ -631,7 +680,7 @@ ipcMain.handle("browse-for-folder", async () => {
 });
 
 // ── IPC: create-species ───────────────────────────────────────────────────────
-ipcMain.handle("create-species", async (_e, speciesName, imagePaths) => {
+handleApp("create-species", async (_e, speciesName, imagePaths) => {
   try {
     const user       = requireUser();
     const settings   = loadSettings();
@@ -671,7 +720,7 @@ ipcMain.handle("create-species", async (_e, speciesName, imagePaths) => {
 // Returns only species that belong to the current user.
 // Does NOT auto-register every folder on disk — species are created explicitly
 // via create-species or by the first user who opened a folder.
-ipcMain.handle("load-output-root", async () => {
+handleApp("load-output-root", async () => {
   try {
     const user     = requireUser();
     const settings = loadSettings();
@@ -713,7 +762,7 @@ ipcMain.handle("load-output-root", async () => {
 // NATIVE Gemini HTTP path — replaces the Python pipeline.py subprocess (commented
 // out below), eliminating the last Python dependency. Emits the same
 // "pipeline-event" messages the renderer already consumes.
-ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
+handleApp("run-pipeline", async (_e, rootDir, speciesName, language) => {
   if (activeRun) return { error: "Pipeline already running." };
   const settings = loadSettings();
   if (!settings.geminiApiKey) return { error: "No API key set. Add your Gemini API key in Settings." };
@@ -721,13 +770,13 @@ ipcMain.handle("run-pipeline", async (_e, rootDir, speciesName, language) => {
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("cancel-pipeline", () => {
+handleApp("cancel-pipeline", () => {
   if (activeRun) { activeRun.cancel = true; try { activeRun.controller.abort(); } catch (_) {} return true; }
   return false;
 });
 
 // ── IPC: copy-images-to-pics ──────────────────────────────────────────────────
-ipcMain.handle("copy-images-to-pics", async (_e, rootDir, speciesName, imagePaths) => {
+handleApp("copy-images-to-pics", async (_e, rootDir, speciesName, imagePaths) => {
   try {
     const picsDir = path.join(rootDir, speciesName, "pics");
     if (!fs.existsSync(picsDir)) fs.mkdirSync(picsDir, { recursive: true });
@@ -745,7 +794,7 @@ ipcMain.handle("copy-images-to-pics", async (_e, rootDir, speciesName, imagePath
 });
 
 // ── IPC: pick-images ──────────────────────────────────────────────────────────
-ipcMain.handle("pick-images", async () => {
+handleApp("pick-images", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Select herbarium specimen images",
     properties: ["openFile", "multiSelections"],
@@ -871,7 +920,7 @@ async function runVoucherNative(rootDir, speciesName) {
   send({ event: "closed", code: 0 });
 }
 
-ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
+handleApp("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
   if (activeRun) return { error: "A pipeline is already running." };
   const settings = loadSettings();
   const vv = buildVvConfig(settings);
@@ -888,7 +937,7 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
  *    VoucherVisionGO HTTP client above). Kept commented for reference; remove
  *    voucher_pipeline.py and the `VoucherVision` pip requirement once confident.
  *
- * ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
+ * handleApp("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
  *   const settings = loadSettings();
  *   if (!settings.authToken)      return { error: "No auth token set. Add it in Settings." };
  *   if (!settings.geminiApiKey)   return { error: "No Gemini API key set. Add it in Settings." };
@@ -940,44 +989,44 @@ ipcMain.handle("run-voucher-pipeline", async (_e, rootDir, speciesName) => {
 // renderer's current rootDir as the library scope, and convert thrown errors to
 // { error } objects (never throw across IPC). setCapture is a main-process-only
 // toggle for silent attachment-download capture.
-ipcMain.handle("gbif:setCapture", (_e, on) => { gbifCapture.setCapturing(!!on); return { ok: true }; });
+handleApp("gbif:setCapture", (_e, on) => { gbifCapture.setCapturing(!!on); return { ok: true }; });
 
-ipcMain.handle("gbif:getOccurrence", async (_e, rootDir, ref) => {
+handleApp("gbif:getOccurrence", async (_e, rootDir, ref) => {
   try { return await gbifService.getOccurrence(requireUser(), rootDir, ref); }
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("gbif:saveImport", async (_e, rootDir, ref, imageData) => {
+handleApp("gbif:saveImport", async (_e, rootDir, ref, imageData) => {
   try { return await gbifService.saveImport(requireUser(), rootDir, ref, imageData); }
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("gbif:list", async (_e, rootDir) => {
+handleApp("gbif:list", async (_e, rootDir) => {
   try { return await gbifService.list(requireUser(), rootDir); }
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("gbif:remove", async (_e, id) => {
+handleApp("gbif:remove", async (_e, id) => {
   try { return gbifService.remove(requireUser(), id); }
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("gbif:enumerateSearch", async (_e, rootDir, searchUrl, opts) => {
+handleApp("gbif:enumerateSearch", async (_e, rootDir, searchUrl, opts) => {
   try { return await gbifService.enumerateSearch(requireUser(), rootDir, searchUrl, opts || {}); }
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("gbif:bookmark", async (_e, rootDir, url, label) => {
+handleApp("gbif:bookmark", async (_e, rootDir, url, label) => {
   try { return gbifService.bookmarkSearch(requireUser(), rootDir, url, label); }
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("gbif:bookmarks", async (_e, rootDir) => {
+handleApp("gbif:bookmarks", async (_e, rootDir) => {
   try { return gbifService.listBookmarks(requireUser(), rootDir); }
   catch (err) { return { error: err.message }; }
 });
 
-ipcMain.handle("gbif:removeBookmark", async (_e, id) => {
+handleApp("gbif:removeBookmark", async (_e, id) => {
   try { return gbifService.removeBookmark(requireUser(), id); }
   catch (err) { return { error: err.message }; }
 });

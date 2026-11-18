@@ -53,3 +53,8 @@ Both default to `gemini-3.1-flash-lite` and the `SLTPvM_full.yaml` prompt.
 All credentials are stored locally in Electron's per-user app-data directory
 (never committed to the repo).
 
+
+## Firebase authentication
+
+IRIS uses Firebase Authentication for account registration, sign-in, and password
+reset. Email verification is required before accessing the app.
